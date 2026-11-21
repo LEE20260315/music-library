@@ -131,18 +131,19 @@ body.has-mini{padding-bottom:66px}
 .empty{padding:70px 0;text-align:center;color:var(--ink-faint);font-family:var(--serif);font-size:17px}
 /* ===== 播放器 ===== */
 /* 进出唱片页走同一条"上浮 + 淡入淡出"曲线，返回首页不再是硬切 */
-.player{position:fixed;inset:0;z-index:100;background:var(--paper);overflow-y:auto;display:none}
-.player.open{display:block;animation:playerIn .34s cubic-bezier(.22,.8,.3,1) both}
+/* 唱片页钉死在视口里：整页不出现滚动条，滚动只发生在曲目/歌词/文字这几个容器内部 */
+.player{position:fixed;inset:0;z-index:100;background:var(--paper);overflow:hidden;display:none}
+.player.open{display:flex;flex-direction:column;animation:playerIn .34s cubic-bezier(.22,.8,.3,1) both}
 .player.open.closing{animation:playerOut .28s cubic-bezier(.4,0,1,1) both;pointer-events:none}
 @keyframes playerIn{from{opacity:0;transform:translateY(20px) scale(.994)}to{opacity:1;transform:none}}
 @keyframes playerOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(14px) scale(.996)}}
 @media(prefers-reduced-motion:reduce){.player.open,.player.open.closing{animation-duration:.01s}}
 .pbar{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--paper) 93%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:12px 26px;display:flex;align-items:center;justify-content:space-between}
 .close-btn{border:1px solid var(--line);background:var(--paper-2);color:var(--ink);border-radius:999px;padding:7px 16px;cursor:pointer;font-size:13px}.close-btn:hover{border-color:var(--terra);color:var(--terra)}
-.pinner{max-width:1120px;margin:0 auto;padding:24px 26px 60px}
-.ptop{display:grid;grid-template-columns:250px 1fr;gap:36px;align-items:center;margin-bottom:22px}
+.pinner{max-width:1440px;margin:0 auto;padding:12px 24px 14px;flex:1;min-height:0;display:flex;flex-direction:column;gap:10px;width:100%}
+.ptop{display:grid;grid-template-columns:168px 1fr;gap:24px;align-items:center}
 @media(max-width:760px){.ptop{grid-template-columns:1fr;justify-items:center;text-align:center}}
-.vinyl-stage{position:relative;width:250px;height:250px}
+.vinyl-stage{position:relative;width:168px;height:168px}
 /* 转盘：唱片坐在一圈金属盘沿上，边缘有厚度，才不会像贴在纸上的一张圆 */
 .vinyl-stage::before{content:"";position:absolute;inset:3px;border-radius:50%;
   background:conic-gradient(from 205deg,#4a453d 0deg,#121110 55deg,#5a544a 118deg,#15140f 190deg,#4a453d 268deg,#0d0c0b 330deg,#4a453d 360deg);
@@ -171,17 +172,18 @@ body.has-mini{padding-bottom:66px}
 #armGroup{transform:rotate(-20deg);transform-origin:208px 44px;transition:transform .9s cubic-bezier(.4,0,.2,1)}
 #armGroup.on{transform:rotate(4deg)}
 .arm-sleeve{transition:opacity .4s}
-.pmeta .p-eyebrow{font-size:10px;letter-spacing:.22em;color:var(--terra);font-weight:700;margin-bottom:8px}
-.pmeta h2{font-family:var(--serif);font-size:clamp(24px,3vw,40px);font-weight:600;line-height:1.2;margin:0 0 6px}
-.pmeta .artist{font-family:var(--serif);font-size:18px;color:var(--ink-soft);margin-bottom:14px}
-.chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:18px}
+/* 顶部这一块要压紧：它每高 1px，下面的歌词区就少 1px。所有外边距都收到最小。 */
+.pmeta .p-eyebrow{font-size:10px;letter-spacing:.22em;color:var(--terra);font-weight:700;margin-bottom:3px}
+.pmeta h2{font-family:var(--serif);font-size:clamp(21px,2.4vw,31px);font-weight:600;line-height:1.18;margin:0 0 3px}
+.pmeta .artist{font-family:var(--serif);font-size:16px;color:var(--ink-soft);margin-bottom:8px}
+.chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px}
 .chip{font-size:10.5px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--ink-soft);background:var(--paper-2)}.chip.hi{color:var(--terra);border-color:var(--terra-2)}
-.transport{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-bottom:12px}
+.transport{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:7px}
 .tbtn{border:0;background:var(--ink);color:var(--paper);border-radius:50%;width:46px;height:46px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:.2s;flex:none}
 .tbtn:hover{background:var(--terra);transform:scale(1.05)}
 .tbtn.sm{width:36px;height:36px;background:var(--paper-2);color:var(--ink);border:1px solid var(--line);font-size:13px}
 /* 进度条独占一行：热区足够高，拖动不会被按钮抢走焦点 */
-.progrow{display:flex;align-items:center;gap:10px;width:100%;margin-bottom:10px}
+.progrow{display:flex;align-items:center;gap:10px;width:100%;margin-bottom:6px}
 .prog{flex:1;min-width:80px;height:6px;background:var(--paper-3);border-radius:99px;cursor:pointer;position:relative;touch-action:none;outline-offset:6px}
 /* 热区：上下各扩 13px，鼠标/手指不用精准对准 6px 细条 */
 .prog::before{content:"";position:absolute;left:-4px;right:-4px;top:-13px;bottom:-13px}
@@ -194,19 +196,44 @@ body.has-mini{padding-bottom:66px}
 .prog.dragging .tip,.prog:hover .tip{opacity:.92}
 .time{font-size:11px;color:var(--ink-faint);font-variant-numeric:tabular-nums;min-width:38px;text-align:left;user-select:none}
 .time.right{text-align:right}
-.vol{display:flex;align-items:center;gap:7px;color:var(--ink-faint);font-size:12px;width:100%;margin-top:4px}.vol input{accent-color:var(--terra);width:110px}
-.now{font-size:12px;color:var(--ink-soft);margin-top:8px;min-height:17px}.now b{color:var(--terra)}
-/* 专辑页主体：左右结构，一屏显示 */
-/* 唱片页：只留「曲目」一张卡；右侧是整列大歌词区（不要框、要够大） */
-.pbody{display:grid;grid-template-columns:minmax(290px,350px) minmax(0,1fr);gap:26px;height:clamp(440px,66vh,720px)}
-@media(max-width:820px){.pbody{grid-template-columns:1fr;height:auto;gap:16px}.lyrwrap{height:58vh}}
-.pbody>.panel{min-width:0;min-height:0;display:flex;flex-direction:column}
+.vol{display:flex;align-items:center;gap:7px;color:var(--ink-faint);font-size:12px;width:100%;margin-top:1px}.vol input{accent-color:var(--terra);width:110px}
+.now{font-size:12px;color:var(--ink-soft);margin-top:4px;min-height:16px}.now b{color:var(--terra)}
+/* 专辑页主体：一屏四栏 —— 关于艺人（最左，纯文字无框）| 曲目（唯一保留的卡片）| 歌词 | 关于专辑（最右，纯文字无框）
+   高度吃满 .pinner 剩下的空间，任何一栏都不许把整页撑出滚动条。 */
+.pbody{display:grid;gap:20px;flex:1;min-height:0;
+  grid-template-areas:"artist tracks lyrics album";
+  grid-template-columns:190px minmax(220px,290px) minmax(0,1fr) 218px}
+.pcol{grid-area:auto;position:relative;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.pcol.api{grid-area:artist}.pcol.alb{grid-area:album}
+.pcol-h{flex:none;font-size:9.5px;letter-spacing:.18em;color:var(--terra);margin:0 0 7px;font-weight:700}
+.pcol-t{flex:1;min-height:0;overflow-y:auto;font-size:11.5px;line-height:1.85;color:var(--ink-soft);white-space:pre-wrap;
+  -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 7%,#000 92%,transparent 100%);
+  mask-image:linear-gradient(180deg,transparent 0,#000 7%,#000 92%,transparent 100%);
+  -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
+.pcol-t.muted{color:var(--ink-faint);font-style:italic;font-family:var(--serif)}
+.pbody>.panel{grid-area:tracks;min-width:0;min-height:0;display:flex;flex-direction:column}
 .panel{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+/* 窄一点就先并成两行（曲目+歌词在上，两段文字在下），一屏仍然装得下 */
+@media(max-width:1199px){
+  .pbody{grid-template-areas:"tracks lyrics" "artist album";
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) 96px;gap:14px}
+}
+/* 手机上一条一列：曲目框、歌词、两段文字都给死高度，
+   不能用 auto —— .pcol 有 min-height:0，auto 行会塌成 0，两段文字直接看不见。 */
+@media(max-width:760px){
+  .pbody{grid-template-areas:"tracks" "lyrics" "artist" "album";
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:minmax(150px,32vh) 44vh 118px 118px;gap:14px;overflow-y:auto}
+  .pcol-t{max-height:none}
+}
 .panel h3{font-family:var(--serif);font-size:14px;margin:0 0 10px;color:var(--terra);display:flex;align-items:center;gap:7px}
 .panel h3::before{content:"";width:4px;height:13px;background:var(--terra);border-radius:2px}
 .tracks{flex:1;min-height:0;overflow-y:auto;margin-bottom:0;padding:6px}
-.tracks::-webkit-scrollbar,.lyr::-webkit-scrollbar,.body::-webkit-scrollbar{width:5px}
-.tracks::-webkit-scrollbar-thumb,.lyr::-webkit-scrollbar-thumb,.body::-webkit-scrollbar-thumb{background:var(--line);border-radius:9px}
+/* 歌词与两侧文字不要拖动条：滚动仍然有效，只是不画那根条 */
+.lyr,.pcol-t{scrollbar-width:none;-ms-overflow-style:none}
+.lyr::-webkit-scrollbar,.pcol-t::-webkit-scrollbar{width:0;height:0}
+.tracks::-webkit-scrollbar{width:5px}
+.tracks::-webkit-scrollbar-thumb{background:var(--line);border-radius:9px}
 .trk{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:12.5px;transition:.15s}
 .trk:hover{background:var(--paper-3)}.trk.on{background:var(--terra);color:#fff}
 .trk .n{font-size:10.5px;color:var(--ink-faint);width:22px;flex:none;font-variant-numeric:tabular-nums}.trk.on .n{color:rgba(255,255,255,.7)}
@@ -219,19 +246,46 @@ body.has-mini{padding-bottom:66px}
    上下淡入淡出（mask 渐隐，滚到边缘自然消失，不是硬切一刀）。
    .lyr 的 position:relative 是必须的——没有它，子元素 offsetTop 会以 .player 为基准，
    居中滚动就会算错位置，表现成"高亮有、但不跟着滚"。 */
-.lyrwrap{position:relative;min-width:0;min-height:0;display:flex;flex-direction:column;padding:0 2px}
+.lyrwrap{grid-area:lyrics;position:relative;min-width:0;min-height:0;display:flex;flex-direction:column;padding:0 2px}
 .lyr{position:relative;flex:1;min-height:0;overflow-y:auto;scroll-behavior:smooth;padding:40px 12px 40px 4px;
   -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 13%,#000 86%,transparent 100%);
   mask-image:linear-gradient(180deg,transparent 0,#000 13%,#000 86%,transparent 100%);
   -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
-.lyr .line{padding:6px 10px;font-size:15px;color:var(--ink-faint);line-height:1.75;border-radius:8px;transition:color .3s,transform .3s;cursor:default}
+.lyr .line{padding:6px 10px;font-size:15px;color:var(--ink-faint);line-height:1.75;border-radius:8px;transition:color .3s,transform .3s,font-size .25s;translate:0 0;cursor:default}
 .lyr .line:hover{color:var(--ink-soft)}
 .lyr .line.active{color:#D9772F;font-weight:700;font-size:19px;line-height:1.6;transform:translateX(3px);text-shadow:0 1px 14px rgba(217,119,47,.22)}
 [data-theme="night"] .lyr .line.active{color:#F2A464}
+/* 换歌时歌词从下方缓缓升起：每行错开 12ms（最多 300ms），配合居中滚动就是"从下往上"。
+   动画只碰独立的 translate 属性，所以 .active 的 transform:translateX 不会被覆盖。 */
+.lyr.rising .line{animation:lineRise .5s cubic-bezier(.22,.8,.3,1) both;animation-delay:min(calc(var(--i,0) * 12ms),300ms)}
+@keyframes lineRise{from{opacity:0;translate:0 16px}to{opacity:1;translate:0 0}}
+@media(prefers-reduced-motion:reduce){.lyr.rising .line{animation:none}}
 .lyr-empty{color:var(--ink-faint);font-family:var(--serif);font-style:italic;font-size:14px;padding:24px 8px;text-align:center}
 .note{margin-bottom:0}.body{flex:1;min-height:0;font-size:12.5px;color:var(--ink-soft);line-height:1.8;white-space:pre-wrap;overflow-y:auto}
 .none{color:var(--ink-faint);font-style:italic;font-family:var(--serif)}
 .footer{text-align:center;color:var(--ink-faint);font-size:10px;padding-top:24px;border-top:1px solid var(--line);margin-top:26px}
+/* 入库按钮条：钉在首页那条横线上面 */
+.libbar{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:26px;padding-top:20px;border-top:1px solid var(--line)}
+.libbtn{border:1px solid var(--terra);background:transparent;color:var(--terra);border-radius:999px;padding:8px 20px;font-size:12.5px;cursor:pointer;transition:.2s;font-family:var(--serif)}
+.libbtn:hover{background:var(--terra);color:var(--paper)}
+.libbtn[disabled]{opacity:.55;cursor:progress}
+.libtip{font-size:10px;color:var(--ink-faint)}
+/* 入库预览弹层 */
+.imp{position:fixed;inset:0;z-index:300;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(20,18,15,.55);backdrop-filter:blur(3px)}
+.imp[hidden]{display:none}
+.imp-box{width:min(640px,100%);max-height:min(78vh,720px);display:flex;flex-direction:column;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:22px 24px;box-shadow:0 24px 60px rgba(0,0,0,.32)}
+.imp-box h4{font-family:var(--serif);font-size:17px;margin:0 0 6px;color:var(--terra)}
+.imp-note{font-size:11.5px;color:var(--ink-soft);line-height:1.7;margin:0 0 14px;white-space:pre-wrap}
+.imp-list{flex:1;min-height:0;overflow-y:auto;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:8px 0;font-size:12px}
+.imp-item{display:flex;gap:10px;align-items:baseline;padding:6px 2px;border-bottom:1px dotted var(--line)}
+.imp-item:last-child{border-bottom:0}
+.imp-item .ia{font-family:var(--serif);font-weight:600}
+.imp-item .in{color:var(--ink-soft)}
+.imp-item .iq{margin-left:auto;font-size:10px;color:var(--ink-faint);white-space:nowrap}
+.imp-act{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
+.imp-act button{border-radius:999px;padding:8px 18px;font-size:12.5px;cursor:pointer;border:1px solid var(--line);background:var(--paper-2);color:var(--ink)}
+.imp-act .go{border-color:var(--terra);background:var(--terra);color:#fff}
+.imp-act button[disabled]{opacity:.55;cursor:progress}
 </style>
 </head>
 <body>
@@ -264,6 +318,10 @@ body.has-mini{padding-bottom:66px}
       <div class="sbsub">UPDATE LOG · 从散落到成库</div>
       <ul class="tree" id="timeline"></ul>
     </aside>
+  </div>
+  <div class="libbar">
+    <button class="libbtn" id="importBtn" type="button">＋ 专辑入库</button>
+    <span class="libtip">把新专辑放进「无损/」后点这里，选一次库目录就能写回 data.js</span>
   </div>
   <div class="footer">本地播放 · 全相对路径 · 插上这块盘，任意电脑双击即可</div>
 </div>
@@ -338,11 +396,28 @@ body.has-mini{padding-bottom:66px}
       </div>
     </div>
     <div class="pbody">
+      <!-- 关于艺人：页面最左，纯文字，没有框也没有底色 -->
+      <section class="pcol api"><div class="pcol-h">关于艺人</div><div class="pcol-t" id="pArtistInfo">—</div></section>
+      <!-- 唯一保留的卡片：曲目 -->
       <div class="panel"><h3>曲目</h3><div class="tracks" id="tracks"></div></div>
-      <!-- 歌词不要卡片框：直接占满右列，上下渐隐，当前行橙色放大 -->
+      <!-- 歌词不要卡片框：占满中间，上下渐隐，当前行橙色放大 -->
       <div class="lyrwrap"><div class="lyr" id="lyrics"></div></div>
+      <!-- 关于专辑：页面最右，纯文字 -->
+      <section class="pcol alb"><div class="pcol-h">关于专辑</div><div class="pcol-t" id="pAlbumInfo">—</div></section>
     </div>
     <div class="footer">唱针落下时，音乐才真正开始。</div>
+  </div>
+</div>
+<!-- 入库预览：先看清楚要加哪几张，再动手写 data.js -->
+<div class="imp" id="impMask" hidden>
+  <div class="imp-box">
+    <h4 id="impHead">专辑入库</h4>
+    <p class="imp-note" id="impNote">—</p>
+    <div class="imp-list" id="impList"></div>
+    <div class="imp-act">
+      <button type="button" id="impCancel">取消</button>
+      <button type="button" class="go" id="impGo">写入</button>
+    </div>
   </div>
 </div>
 <audio id="audio" preload="metadata"></audio>
@@ -378,7 +453,17 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const enc=s=>encodeURIComponent(s).replace(/'/g,'%27');
 // 全部相对路径：页面在 E:\01-音乐 根目录，音频在 无损/ 下，封面在 _covers/ 下
-const imgUrl=al=>al.coverFile?('_covers/'+al.coverFile):'';
+// 封面地址：优先 _covers 里的缩略图（小、快）；刚入库的专辑还没来得及生成缩略图，
+// 就退回专辑目录里的原图（al.cover 是目录内的文件名，如 folder.jpg），一张都不缺。
+const imgUrl=al=>{
+  if(al.coverFile)return '_covers/'+al.coverFile;
+  if(al.cover&&al.rel){
+    let r=al.rel.replace(/\\/g,'/');
+    if(!r.startsWith('无损/'))r='无损/'+r;
+    return r.split('/').map(enc).join('/')+'/'+enc(al.cover);
+  }
+  return '';
+};
 // 封面在根目录 _covers，音频在 无损/，全部相对，插盘即用
 const audUrl=(al,t)=>{
   let r=al.rel.replace(/\\/g,'/');
@@ -417,11 +502,19 @@ const curOff=()=>{
 const pos=()=>Math.max(0,audio.currentTime-curOff());     // 本曲内的真实位置
 const setPos=(t)=>{audio.currentTime=curOff()+Math.max(0,t);};
 
-$('sAlb').textContent=A.length.toLocaleString();
-$('sArt').textContent=new Set(A.map(x=>x.artist)).size.toLocaleString();
-$('sTrk').textContent=A.reduce((n,x)=>n+x.tracks.length,0).toLocaleString();
-$('sIntro').textContent=A.filter(x=>x.intro).length.toLocaleString();
-$('timeline').innerHTML=(D.updates||[]).slice().reverse().map(u=>'<li><div class="d">'+esc(u.date)+'</div><div class="t">'+esc(u.title)+'</div><div class="x">'+esc(u.text)+'</div></li>').join('');
+/* 首页的四个数字和右下角时间轴。抽成函数是因为入库之后要重算、
+   重绘一遍——只导入专辑却不更新文字和数字，等于说了一半的话。 */
+function renderStats(){
+  $('sAlb').textContent=A.length.toLocaleString();
+  $('sArt').textContent=new Set(A.map(x=>x.artist)).size.toLocaleString();
+  $('sTrk').textContent=A.reduce((n,x)=>n+(x.tracks?x.tracks.length:0),0).toLocaleString();
+  $('sIntro').textContent=A.filter(x=>x.intro).length.toLocaleString();
+}
+function renderTimeline(){
+  $('timeline').innerHTML=(D.updates||[]).slice().reverse()
+    .map(u=>'<li><div class="d">'+esc(u.date)+'</div><div class="t">'+esc(u.title)+'</div><div class="x">'+esc(u.text)+'</div></li>').join('');
+}
+renderStats();renderTimeline();
 
 const TABS=[{k:'all',n:'全部'},{k:'artist',n:'按艺人'},{k:'genre',n:'按类型'},{k:'era',n:'按年代'},{k:'quality',n:'按音质'}];
 let curTab='all',query='',groups=[],shownGroups=0;const GSIZE=10;
@@ -441,7 +534,8 @@ function build(){
   $('hint').textContent=query?('找到 '+list.length+' 张相关专辑'):curTab==='all'?'点封面进入唱片页 · 悬停封面点 ▶ 就地播放':('共 '+groups.length+' 个分类');
 }
 function card(al){
-  const cover=al.coverFile?'<img loading="lazy" src="'+imgUrl(al)+'" alt="">':'<div class="ph">♪</div>';
+  const u=imgUrl(al);
+  const cover=u?'<img loading="lazy" src="'+u+'" alt="">':'<div class="ph">♪</div>';
   return '<div class="card" data-i="'+IDX.get(al)+'"><div class="cover-wrap">'+cover+'<span class="badge">'+esc(al.quality)+'</span><span class="card-playback" aria-hidden="true"><i></i><i></i><i></i><i></i></span><button class="card-play" title="就地播放">▶</button></div><div class="nm" title="'+esc(al.album)+'">'+esc(al.album)+'</div><div class="ar">'+esc(al.artist)+(al.disc?' · '+al.disc:'')+'</div></div>';
 }
 function render(){
@@ -521,7 +615,8 @@ function updateMini(){
   // 只在封面源变了才重建 DOM，避免每秒重绘
   if(cover.dataset.k!==String(IDX.get(cur))){
     cover.dataset.k=String(IDX.get(cur));
-    cover.innerHTML=cur.coverFile?'<img src="'+imgUrl(cur)+'" alt="">':'<div class="ph">♪</div>';
+    const mu=imgUrl(cur);
+  cover.innerHTML=mu?'<img src="'+mu+'" alt="">':'<div class="ph">♪</div>';
   }
   $('miniPlay').textContent=playing?'❚❚':'▶';
   $('miniPlay').title=playing?'暂停':'播放';
@@ -552,7 +647,7 @@ function updateMediaSession(){
   try{
     navigator.mediaSession.metadata=new MediaMetadata({
       title:t.n||cur.album,artist:cur.artist,album:cur.album,
-      artwork:(mayArt&&cur.coverFile)?[{src:imgUrl(cur),sizes:'512x512',type:'image/jpeg'}]:[]
+      artwork:(mayArt&&imgUrl(cur))?[{src:imgUrl(cur),sizes:'512x512',type:'image/jpeg'}]:[]
     });
     navigator.mediaSession.playbackState=playing?'playing':'paused';
   }catch(e){}
@@ -627,13 +722,15 @@ function openPlayer(al){
   inlineMode=false;stopInline();
   $('pTitle').textContent=al.album;$('pArtist').textContent=al.artist;
   $('pChips').innerHTML=[al.year,al.quality,al.genre,al.disc].filter(Boolean).map((x,i)=>'<span class="chip'+(i===1?' hi':'')+'">'+esc(x)+'</span>').join('');
-  $('plabel').innerHTML=al.coverFile?'<img src="'+imgUrl(al)+'" alt="">':'<div class="ph">♪</div>';
+  const pu=imgUrl(al);
+  $('plabel').innerHTML=pu?'<img src="'+pu+'" alt="">':'<div class="ph">♪</div>';
   // 曲目右侧带真实时长：一眼看出这首到底多长（很多文件的头部时长是错的）
   $('tracks').innerHTML=al.tracks.map((t,i)=>{
     const d=DUR[durKey(al,t)];
     return '<div class="trk" data-i="'+i+'"><span class="n">'+String(i+1).padStart(2,'0')+'</span><span class="tn">'+esc(t.n)+'</span>'+(d>0?'<span class="dur">'+fmt(d)+'</span>':'')+'</div>';
   }).join('');
   $('tracks').onclick=e=>{const t=e.target.closest('.trk');if(t)playIdx(+t.dataset.i);};
+  fillAlbumInfo(al);
   ensureAlbumLyrics(al);
   const pv=$('player');pv.classList.remove('closing');pv.classList.add('open');document.body.style.overflow='hidden';
   if(cur===al){
@@ -641,6 +738,24 @@ function openPlayer(al){
     renderLyrics(lyricFor(al,curIdx));updateProgress();syncPlaybackUI();
   }else if(playing)playIdx(0,al);
   else load(0,al);
+}
+/* 两侧文字栏：关于艺人（左）与关于专辑（右）。
+   data.js 里 intro 常常是"艺人简介 + 专辑笔记"拼在一起，artistInfo 往往就是它前一段。
+   两栏内容一样时，右栏明确写"与左侧相同"，而不是把同一段话并排贴两遍。 */
+function fillAlbumInfo(al){
+  const ai=(al.artistInfo||'').trim(), intro=(al.intro||'').trim();
+  const left=ai||intro, right=intro||ai;
+  const setCol=(el,text,empty)=>{
+    el.textContent=text||empty;
+    el.classList.toggle('muted',!text);
+  };
+  setCol($('pArtistInfo'),left,'这张唱片没有留下艺人资料。');
+  // intro 以 artistInfo 开头（很常见）：右栏只贴"多出来的那截专辑笔记"，不为同一段话再说一遍
+  if(intro&&ai&&intro.startsWith(ai)){
+    const tail=intro.slice(ai.length).replace(/^[\s，。、;；:：\-—]+/,'').trim();
+    setCol($('pAlbumInfo'),tail,'这张唱片没有额外的专辑笔记，艺人资料见左侧。');
+  }else if(right&&left&&right===left)setCol($('pAlbumInfo'),'这张唱片的笔记与左侧艺人资料相同，内容见左边。','');
+  else setCol($('pAlbumInfo'),right,'这张唱片没有留下专辑笔记。');
 }
 /* 返回首页：先播退场动画再卸载，避免"啪一下就没了"。
    动画结束用 animationend 收尾，另留 380ms 兜底（万一动画被系统关掉）。 */
@@ -654,6 +769,13 @@ function closePlayer(){
     el.classList.remove('closing','open');
     document.body.style.overflow='';
     updateMini();
+    // 回首页后把黑胶接回当前这张卡：openPlayer 进来时卸掉过，
+    // 不接回来的话唱片就停在那儿，得再点一下 ▶ 才转。
+    if(cur&&cur.tracks.length){
+      const card=$('main').querySelector('.card[data-i="'+IDX.get(cur)+'"]');
+      const wrap=card&&card.querySelector('.cover-wrap');
+      if(wrap){inlineMode=true;showInline(wrap);syncPlaybackUI(playing);}
+    }
   };
   if(matchMedia('(prefers-reduced-motion: reduce)').matches){el.classList.add('closing');finish();return;}
   el.addEventListener('animationend',function h(e){
@@ -763,7 +885,13 @@ function renderLyrics(lines){
     if(cur&&cur.tracks[curIdx]&&cur.artist)autoSearchLyrics(cur.tracks[curIdx],cur.artist);
     return;
   }
-  $('lyrics').innerHTML=lines.map((l,i)=>'<div class="line" data-i="'+i+'">'+esc(l.l)+'</div>').join('');
+  const box=$('lyrics');
+  // --i 是这一行的序号，CSS 拿它算阶梯延迟：越靠下的行越晚出现，
+  // 看上去就是从下往上依次升起。换歌时重挂 .rising 才能重放动画。
+  box.innerHTML=lines.map((l,i)=>'<div class="line" style="--i:'+i+'" data-i="'+i+'">'+esc(l.l)+'</div>').join('');
+  box.classList.remove('rising');
+  void box.offsetWidth;      // 强制重排，让动画能重新触发
+  box.classList.add('rising');
   syncLyric(true);   // 切歌后立刻定位当前行，不等第一次 timeupdate
 }
 function syncLyric(force){
@@ -959,7 +1087,184 @@ document.addEventListener('keydown',e=>{
   else if(e.key==='ArrowRight'&&cur&&e.target!==prog){e.preventDefault();skipBy(1);}
   else if(e.key==='ArrowLeft'&&cur&&e.target!==prog){e.preventDefault();skipBy(-1);}
 });
+/* ===== 专辑入库 =====
+   为什么放在页面里：库现在 1695 张专辑，每加一批都要找 agent 跑脚本不现实。
+   Chrome/Edge 即使从 file:// 打开也支持 File System Access API（实测 isSecureContext=true），
+   所以点一次按钮选个目录，扫描、预览、写回 data.js 全程不出这个页面。
+   两条硬规矩：
+   1) 新专辑只能追加到数组末尾 —— _lyrics 分片按专辑下标命名，重排会让歌词全部错位。
+   2) 写 data.js 之前先存一份 data.js.bak-<时间>，真写坏了还能捞回来。 */
+const IMP_AUDIO=/\.(flac|wav|ape|m4a|mp3|dsf|dff|wv|tta|aiff|alac)$/i;
+const IMP_COVER=/^(folder|cover|front|封面)\.(jpe?g|png|webp)$/i;
+const IMP_SKIP=new Set(['_covers','_lyrics','.git','__pycache__','System Volume Information','$RECYCLE.BIN']);
+const impEra=y=>{
+  const n=parseInt(y,10);
+  if(!n)return '未标年';
+  if(n<1960)return '60年代及以前';
+  if(n<2000)return (Math.floor(n/10)%10)+'0年代';
+  return Math.floor(n/10)*10+'年代';
+};
+// 读 FLAC 文件头 42 字节里的 STREAMINFO：采样率与位深决定"音质"这一栏怎么写。
+// 只读文件头，不解码音频，几千个文件也是秒级。
+async function impFlacInfo(file){
+  try{
+    const b=new Uint8Array(await file.slice(0,42).arrayBuffer());
+    if(b[0]!==0x66||b[1]!==0x4c||b[2]!==0x61||b[3]!==0x43)return null;
+    const sr=(b[18]<<12)|(b[19]<<4)|(b[20]>>4);
+    const bps=(((b[20]&1)<<4)|(b[21]>>4))+1;
+    return (sr&&bps)?{sr,bps}:null;
+  }catch(e){return null;}
+}
+const impKHz=sr=>{const k=sr/1000;return (Number.isInteger(k)?k:k.toFixed(1))+'kHz';};
+// 专辑目录名 → 年份 / 音质 / 专辑名 / 碟号。库里的目录是 "(2001) 专辑名 [24-96] CD1" 这种格式。
+function impParse(dirname){
+  const ym=dirname.match(/^\((\d{4})\)\s*/);
+  const year=ym?ym[1]:'';
+  const rest=ym?dirname.slice(ym[0].length):dirname;
+  const qm=rest.match(/\[(\d{2,3})-([\d.]+)\]/);      // [24-96] / [24-44.1]
+  const quality=qm?(+qm[1])+'bit / '+qm[2]+'kHz':'';
+  let album=rest.replace(/\s*\[\d{2,3}-[\d.]+\]/g,'').trim();
+  const dm=album.match(/\s+(CD\s*\d+|Disc\s*\d+)$/i);
+  const disc=dm?dm[1].replace(/\s+/g,''):'';
+  if(dm)album=album.slice(0,dm.index).trim();
+  return {year,quality,album:album||dirname,disc};
+}
+const impDirs=async dir=>{const out=[];for await(const h of dir.values()){if(h.kind==='directory'&&!IMP_SKIP.has(h.name))out.push(h);}return out;};
+// 扫描：无损/<艺人>/<专辑>/…（CD1 之类子目录也认，最多再下两层）
+async function impScan(root){
+  let base=root;
+  try{base=await root.getDirectoryHandle('无损');}catch(e){}
+  const hits=[];
+  for(const artistDir of await impDirs(base)){
+    for(const albumDir of await impDirs(artistDir)){
+      const files=[];
+      const walk=async(dir,depth,prefix)=>{
+        for await(const h of dir.values()){
+          if(h.kind==='file'){if(IMP_AUDIO.test(h.name))files.push({name:h.name,path:prefix+h.name,handle:h});}
+          else if(depth<2&&!IMP_SKIP.has(h.name))await walk(h,depth+1,prefix+h.name+'/');
+        }
+      };
+      await walk(albumDir,0,'');
+      if(files.length)hits.push({artist:artistDir.name,dirname:albumDir.name,dir:albumDir,files});
+    }
+  }
+  return hits;
+}
+async function impAlbum(entry){
+  const mi=impParse(entry.dirname);
+  const files=entry.files.slice().sort((x,y)=>x.name.localeCompare(y.name,'en',{numeric:true}));
+  let cover='';
+  try{for await(const h of entry.dir.values()){if(h.kind==='file'&&IMP_COVER.test(h.name)){cover=h.name;break;}}}catch(e){}
+  if(!mi.quality){
+    for(const f of files){
+      const info=await impFlacInfo(await f.handle.getFile());
+      if(info){mi.quality=info.bps+'bit / '+impKHz(info.sr);break;}
+    }
+  }
+  return {
+    artist:entry.artist,album:mi.album,year:mi.year,quality:mi.quality||'未标注',
+    disc:mi.disc,era:impEra(mi.year),genre:'其他',
+    cover:cover,intro:'',artistInfo:'',
+    rel:'无损/'+entry.artist+'/'+entry.dirname,
+    tracks:files.map(f=>({n:f.name.replace(IMP_AUDIO,'').replace(/^\s*\d{1,3}\s*[-._]\s*/,''),p:f.path})),
+    coverFile:''
+  };
+}
+// 足迹规则（与 库维护须知.md 一致）：同一天只留一条，标题 ≤14 字，正文用「；」接在后面
+function addUpdate(date,title,text){
+  D.updates=D.updates||[];
+  const t=title.length>14?title.slice(0,14):title;
+  const day=D.updates.find(u=>u.date===date);
+  if(day){day.title=t;day.text=day.text+'；'+text;}
+  else D.updates.push({date,title:t,text:text});
+}
+const impMask=$('impMask'),impList=$('impList'),impNote=$('impNote'),impGo=$('impGo'),impHead=$('impHead');
+let impPlan=[];
+function impShow(head,note,items,goText){
+  impHead.textContent=head;impNote.textContent=note;
+  impList.innerHTML=items.map(x=>'<div class="imp-item"><span class="ia">'+esc(x.a)+'</span><span class="in">'+esc(x.b)+'</span>'+(x.c?'<span class="iq">'+esc(x.c)+'</span>':'')+'</div>').join('')||'<div class="imp-item"><span class="in">没有需要入库的专辑。</span></div>';
+  impGo.textContent=goText||'写入';impGo.disabled=!items.length;
+  impMask.hidden=false;
+}
+function impHide(){impMask.hidden=true;impPlan=[];}
+$('impCancel').onclick=impHide;
+impMask.addEventListener('click',e=>{if(e.target===impMask)impHide();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!impMask.hidden)impHide();});
+
+async function impStart(){
+  const btn=$('importBtn');
+  if(!window.showDirectoryPicker){impShow('这个浏览器做不到','当前浏览器不支持直接写库。\n用 Chrome 或 Edge 打开本页再试，其余功能不受影响。',[],'');return;}
+  let root;
+  try{root=await window.showDirectoryPicker({mode:'readwrite',id:'sirius-musiclib'});}
+  catch(e){return;}                       // 用户自己取消了，什么都不用说
+  if(!(await root.queryPermission({mode:'readwrite'})==='granted')){
+    if((await root.requestPermission({mode:'readwrite'}))!=='granted')return;
+  }
+  btn.disabled=true;btn.textContent='扫描中…';
+  try{
+    const hits=await impScan(root);
+    const seen=new Set(A.map(a=>a.rel.replace(/\\/g,'/').toLowerCase()));
+    const seenName=new Set(A.map(a=>a.artist.toLowerCase()+'|'+String(a.album||'').toLowerCase()));
+    const fresh=hits.filter(h=>!seen.has(('无损/'+h.artist+'/'+h.dirname).toLowerCase()));
+    if(!fresh.length){
+      btn.disabled=false;btn.textContent='＋ 专辑入库';
+      impShow('没有新专辑','扫到 '+hits.length+' 张专辑，库里都已经有了。\ndata.js 没有改动。',[],'');
+      return;
+    }
+    const albums=[];
+    for(const h of fresh){const al=await impAlbum(h);const k=al.artist.toLowerCase()+'|'+al.album.toLowerCase();if(!seenName.has(k)){seenName.add(k);albums.push(al);}}
+    impPlan=albums;
+    const missing=albums.filter(a=>!a.quality||a.quality==='未标注').length;
+    impShow('发现 '+albums.length+' 张新专辑',
+      '写入方式：新专辑追加到 data.js 末尾（不改动已有顺序，否则歌词分片会错位）。\n写之前会先存一份 data.js.bak-时间。'+(missing?'\n另有 '+missing+' 张读不到音质信息，先标成「未标注」。':''),
+      albums.map(a=>({a:a.album||a.rel,b:a.artist+' · '+a.tracks.length+' 曲',c:a.quality})),
+      '写入 '+albums.length+' 张');
+    btn.disabled=false;btn.textContent='＋ 专辑入库';
+    impGo.onclick=()=>impCommit(root);
+  }catch(err){
+    btn.disabled=false;btn.textContent='＋ 专辑入库';
+    impShow('扫描失败','读目录时出错：'+(err&&err.message?err.message:err),[],'');
+  }
+}
+async function impCommit(root){
+  impGo.disabled=true;impGo.textContent='写入中…';
+  try{
+    const now=new Date();
+    const p2=n=>String(n).padStart(2,'0');
+    const stamp=now.getFullYear()+p2(now.getMonth()+1)+p2(now.getDate())+'-'+p2(now.getHours())+p2(now.getMinutes());
+    const day=now.getFullYear()+'-'+p2(now.getMonth()+1)+'-'+p2(now.getDate());
+    const fh=await root.getFileHandle('data.js');
+    const oldText=await (await fh.getFile()).text();
+    // 1) 备份原件：写坏一次还能原样捞回来
+    const bak=await root.getFileHandle('data.js.bak-'+stamp,{create:true});
+    const bw=await bak.createWritable();await bw.write(oldText);await bw.close();
+    // 2) 追加新专辑：只能 push 到末尾
+    for(const al of impPlan){A.push(al);IDX.set(al,A.length-1);}
+    D.albums=A;D.generated=day;
+    addUpdate(day,'新专辑入库 '+impPlan.length+' 张',
+      '新增 '+impPlan.length+' 张（'+impPlan.reduce((n,a)=>n+a.tracks.length,0)+' 曲）：'+
+      impPlan.map(a=>a.artist+'《'+a.album+'》').slice(0,4).join('、')+(impPlan.length>4?' 等':''));
+    // 3) 整份重写 data.js：格式与原文件一致，中文不转义
+    const text='window.LIB_DATA='+JSON.stringify(D)+';';
+    const w=await fh.createWritable();await w.write(text);await w.close();
+    // 4) 页面就地刷新：数字、足迹、封面墙都要跟着变
+    build();renderStats();renderTimeline();
+    const n=impPlan.length;         // 先记下来：impHide 会把 impPlan 清空
+    impHide();
+    impShow('入库完成','已写入 '+n+' 张专辑。\ndata.js 的原件备份为 data.js.bak-'+stamp+'。\n若这张盘换到别的电脑，插盘后双击本页即可，路径全是相对的。',[],'');
+    impGo.textContent='好';
+    impGo.disabled=false;
+    impGo.onclick=impHide;
+  }catch(err){
+    impShow('写入失败','写 data.js 时出错：'+(err&&err.message?err.message:err)+'\n如果刚才已经建了 .bak，可以用它覆盖回去。\n请把这段错误告诉我，别自己改 data.js。',[],'');
+    impGo.textContent='知道了';
+    impGo.disabled=false;
+    impGo.onclick=impHide;
+  }
+}
+$('importBtn').onclick=impStart;
 build();
+
 </script>
 </body>
 </html>

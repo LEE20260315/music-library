@@ -337,7 +337,9 @@ def main():
         if not sr or abs((hdr or 0) - real) < 1.0:
             continue
         if dry:
-            print(f'  将修正 {r.get("hdr")}s -> {real}s  {rel}', flush=True)
+            # 这里原来写的是 r.get("hdr")，而 r 是 main 里不存在的变量（它在 work()
+            # 的局部作用域里），--fix --dry-run 必然 NameError。用循环里的 hdr 才是对的值。
+            print(f'  将修正 {hdr}s -> {real}s  {rel}', flush=True)
             fixed += 1
             continue
         old = patch_header(f, real, sr)
