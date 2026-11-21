@@ -1200,6 +1200,13 @@ async function impStart(){
   if(!(await root.queryPermission({mode:'readwrite'})==='granted')){
     if((await root.requestPermission({mode:'readwrite'}))!=='granted')return;
   }
+  // 选错目录是最容易踩的坑：让人选「无损」而不是库根目录，扫描能过、写 data.js 时才炸。
+  // 这里先探一下 data.js 在不在，不在就直接说清楚该怎么选。
+  try{await root.getFileHandle('data.js');}
+  catch(e){
+    impShow('目录选错了','请选「音乐库」这一层目录（里面能看到 data.js 和 无损 文件夹），\n不要直接选里面的「无损」。\n选对了再点一次「专辑入库」即可。',[],'');
+    return;
+  }
   btn.disabled=true;btn.textContent='扫描中…';
   try{
     const hits=await impScan(root);

@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""补歌词.py — 从 lrclib.net 抓同步歌词，落成本地分片 JS（离线可用）。
+"""补歌词.py — 从 lrclib.net 与网易云音乐抓同步歌词，落成本地分片 JS（离线可用）。
 
 用法:
   python 补歌词.py                  # 全量
   python 补歌词.py --limit 40      # 只处理 40 首未处理项
   python 补歌词.py --jobs 4        # 全局并发，默认 4（上限 4）
   python 补歌词.py --album 123     # 调试单张专辑（专辑下标）
-  python 补歌词.py --min-score 3   # 匹配分阈值，默认 3
+  python 补歌词.py --retry-miss    # 重跑 _state.json 中记为 miss 的曲目
+  python 补歌词.py --min-score 3   # lrclib 匹配分阈值，默认 3
 
+匹配顺序：lrclib（带专辑名搜索 → miss 且有专辑名时去掉专辑名再搜一次）
+        → 网易云（search 取第一条曲名证据通过的候选 → 取其歌词）。
 Ctrl+C 随时中断：进度落盘 _lyrics/_state.json，重跑自动续。
 """
 import argparse
@@ -35,6 +38,13 @@ SHARD_PREFIX = "window.LIB_LYR=window.LIB_LYR||{};"
 HDRS = {
     "User-Agent": "bu-geci/1.0 (offline music library lyrics fetcher)",
     "Accept": "application/json",
+}
+NE_SEARCH = "https://music.163.com/api/search/get"
+NE_LYRIC = "https://music.163.com/api/song/lyric"
+NE_HDRS = {
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
+    "Referer": "https://music.163.com/",
 }
 TS_PAT = re.compile(r"\[\d{1,2}:\d{2}")
 SHARD_RE = re.compile(r"^" + re.escape(SHARD_PREFIX) + r"window\.LIB_LYR\[(\d+)\]=(\{.*\});$")
@@ -81,25 +91,14 @@ def score_cand(c, tn, an, aln):
     return s
 
 
-def name_ok(c, tn):
-    ct = norm(c.get("trackName"))
-    return bool(ct and tn and (ct == tn or ct in tn or tn in ct))
-
-
 def decide(results, tn, an, aln, min_score):
-    """选最高分且 >= 阈值的候选；instrumental / 纯歌词 / 无时间戳一律不算命中。
-
-    额外要求「曲名必须有证据」：艺人(2)+专辑(1)=3 也能到阈值，
-    那等于把同专辑里另一首歌的歌词错配给这首，比没有歌词更糟。
-    """
+    """lrclib 候选择优：选最高分且 >= 阈值的；instrumental / 纯歌词 / 无时间戳一律不算命中。"""
     best_s, best_lrc = -1, None
     for c in results or []:
         if c.get("instrumental"):
             continue
         lrc = (c.get("syncedLyrics") or "").strip()
         if not lrc or not TS_PAT.search(lrc):
-            continue
-        if not name_ok(c, tn):
             continue
         s = score_cand(c, tn, an, aln)
         if s > best_s:
@@ -109,47 +108,128 @@ def decide(results, tn, an, aln, min_score):
     return "miss", None
 
 
-def fetch_search(track, artist, album):
-    qs = urllib.parse.urlencode(
-        {"track_name": track, "artist_name": artist, "album_name": album}
-    )
-    req = urllib.request.Request(API + "?" + qs, headers=HDRS)
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        return json.loads(resp.read().decode("utf-8", "replace"))
-
-
-def process_track(item, min_score):
-    """单首：429 退避 30s（同首最多 3 次）；其它网络异常重试 2 次后记 miss，不抛出。
-
-    带专辑名搜不到时，去掉专辑名再搜一次：lrclib 里很多冷门专辑没有专辑元数据，
-    带上专辑名反而把结果筛空，这是命中率上不去的主要原因之一。
-    """
-    ai, ti, t, a, al = item
+def http_get_json(url, headers):
+    """GET 并解析 JSON；429 退避 30s（同一请求最多 3 次），其它网络异常退避 2s 重试
+    2 次，仍失败返回 None；绝不向上抛异常。"""
     rl = net = 0
     while True:
         try:
-            results = fetch_search(t, a, al)
-            status, lrc = decide(results, norm(t), norm(a), norm(al), min_score)
-            if status == "miss" and al:
-                results = fetch_search(t, a, "")
-                status, lrc = decide(results, norm(t), norm(a), "", min_score)
-            return ai, ti, status, lrc
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                return json.loads(resp.read().decode("utf-8", "replace"))
         except urllib.error.HTTPError as e:
             if e.code == 429:
                 rl += 1
                 if rl >= 3:
-                    return ai, ti, "miss", None
+                    return None
                 time.sleep(30)
             else:
                 net += 1
                 if net >= 3:
-                    return ai, ti, "miss", None
+                    return None
                 time.sleep(2)
         except (urllib.error.URLError, OSError, ValueError):
             net += 1
             if net >= 3:
-                return ai, ti, "miss", None
+                return None
             time.sleep(2)
+
+
+def fetch_search(track, artist, album):
+    """lrclib 搜索；专辑名为空时不带该参数。"""
+    params = {"track_name": track, "artist_name": artist}
+    if album:
+        params["album_name"] = album
+    qs = urllib.parse.urlencode(params)
+    return http_get_json(API + "?" + qs, HDRS)
+
+
+def lrclib_decide(t, a, al, tn, an, aln, min_score):
+    """lrclib 路径：先带专辑名搜；仍 miss 且有专辑名时，去掉专辑名再搜一次。"""
+    status, lrc = decide(fetch_search(t, a, al), tn, an, aln, min_score)
+    if status == "hit" or not al:
+        return status, lrc
+    return decide(fetch_search(t, a, ""), tn, an, aln, min_score)
+
+
+def ne_search(track, artist):
+    """网易云搜索：s=曲名+空格+艺人，返回 result.songs[]（失败/无结果返回 []）。"""
+    qs = urllib.parse.urlencode(
+        {"s": (track + " " + artist).strip(), "type": 1, "limit": 10, "offset": 0}
+    )
+    data = http_get_json(NE_SEARCH + "?" + qs, NE_HDRS)
+    if not isinstance(data, dict):
+        return []
+    result = data.get("result")
+    songs = result.get("songs") if isinstance(result, dict) else None
+    return songs if isinstance(songs, list) else []
+
+
+def ne_lyric(song_id):
+    """网易云歌词：返回 lrc.lyric 原文（取不到返回 None）。"""
+    qs = urllib.parse.urlencode({"id": song_id, "lv": 1, "kv": 1, "tv": -1})
+    data = http_get_json(NE_LYRIC + "?" + qs, NE_HDRS)
+    if not isinstance(data, dict):
+        return None
+    lrc = data.get("lrc")
+    if isinstance(lrc, dict) and isinstance(lrc.get("lyric"), str) and lrc["lyric"].strip():
+        return lrc["lyric"]
+    return None
+
+
+def ne_artist_ok(song, an):
+    """艺人证据：任一 artists[].name 归一化后相等或互相包含即通过；无艺人信息不否决。"""
+    if not an:
+        return True
+    arts = song.get("artists")
+    if not isinstance(arts, list) or not arts:
+        return True
+    for art in arts:
+        na = norm(art.get("name")) if isinstance(art, dict) else ""
+        if na and (na == an or na in an or an in na):
+            return True
+    return False
+
+
+def ne_decide(track, artist, tn, an):
+    """网易云路径（每首最多 2 次请求）：search 后只认「曲名证据」——归一化后曲名相等
+    或互相包含的候选；优先取第一条同时有艺人证据的，无则退回第一条纯曲名证据的；
+    取其歌词并复用 TS_PAT，无 [mm:ss 时间戳不算命中。"""
+    if not tn:
+        return "miss", None
+    songs = ne_search(track, artist)
+    pick = None
+    for song in songs:
+        if not isinstance(song, dict):
+            continue
+        nname = norm(song.get("name"))
+        if not nname or not (nname == tn or nname in tn or tn in nname):
+            continue
+        if ne_artist_ok(song, an):
+            pick = song
+            break
+        if pick is None:
+            pick = song
+    if pick is None or pick.get("id") is None:
+        return "miss", None
+    text = ne_lyric(pick.get("id"))
+    if text and TS_PAT.search(text):
+        return "hit", text
+    return "miss", None
+
+
+def process_track(item, min_score):
+    """单首完整链路：lrclib（带专辑名 → 无专辑名）→ 网易云；全部网络异常都在
+    http_get_json 内消化，不会抛出。返回 (ai, ti, status, lrc, src)。"""
+    ai, ti, t, a, al = item
+    tn, an, aln = norm(t), norm(a), norm(al)
+    status, lrc = lrclib_decide(t, a, al, tn, an, aln, min_score)
+    if status == "hit":
+        return ai, ti, "hit", lrc, "lrclib"
+    status, lrc = ne_decide(t, a, tn, an)
+    if status == "hit":
+        return ai, ti, "hit", lrc, "netease"
+    return ai, ti, "miss", None, ""
 
 
 def load_lib():
@@ -184,7 +264,7 @@ def save_state(state):
 
 
 def load_shards():
-    """启动时读回已有分片，作为命中歌词的事实来源。"""
+    """启动时读回已有分片，作为命中歌词的事实来源（保证已有 hit 的内容不会被覆盖丢失）。"""
     hits = {}
     if not os.path.isdir(LYR_DIR):
         return hits
@@ -290,7 +370,7 @@ def main():
         except Exception:
             pass
 
-    ap = argparse.ArgumentParser(description="从 lrclib.net 抓同步歌词到本地分片 JS")
+    ap = argparse.ArgumentParser(description="从 lrclib 与网易云抓同步歌词到本地分片 JS")
     ap.add_argument("--limit", type=int, default=None, metavar="N",
                     help="只处理 N 首未处理项后退出")
     ap.add_argument("--jobs", type=int, default=4, metavar="N",
@@ -298,7 +378,9 @@ def main():
     ap.add_argument("--album", type=int, default=None, metavar="IDX",
                     help="只处理该专辑下标（调试用）")
     ap.add_argument("--min-score", type=int, default=3, metavar="N",
-                    help="匹配分阈值（默认 3）")
+                    help="lrclib 匹配分阈值（默认 3）")
+    ap.add_argument("--retry-miss", action="store_true",
+                    help="重跑 _state.json 中记为 miss 的曲目（先 lrclib 再网易云）")
     args = ap.parse_args()
     args.jobs = max(1, min(args.jobs, 4))
 
@@ -328,7 +410,12 @@ def main():
     skipped = 0
     items = []
     for ai, ti in scope:
-        if "%d:%d" % (ai, ti) in done:
+        key = "%d:%d" % (ai, ti)
+        if args.retry_miss:
+            if done.get(key) != "miss":
+                skipped += 1
+                continue
+        elif key in done:
             skipped += 1
             continue
         a = albums[ai]
@@ -338,7 +425,11 @@ def main():
         items = items[: args.limit]
 
     print("库: %d 张专辑 / %d 首曲目" % (len(albums), total_tracks))
-    print("跳过已处理 %d 项，本次待处理 %d 项（--jobs %d）" % (skipped, len(items), args.jobs), flush=True)
+    if args.retry_miss:
+        print("重试模式：仅重跑 miss 项（命中保持不变），本次重试 %d 项 / 跳过 %d 项（--jobs %d）"
+              % (len(items), skipped, args.jobs), flush=True)
+    else:
+        print("跳过已处理 %d 项，本次待处理 %d 项（--jobs %d）" % (skipped, len(items), args.jobs), flush=True)
     if not items:
         checkpoint(state, hits, set())
         write_report(state, albums)
@@ -350,19 +441,22 @@ def main():
     printed_at = -1
     touched = set()
     interrupted = False
+    src_hits = {"lrclib": 0, "netease": 0}
     ex = ThreadPoolExecutor(max_workers=args.jobs)
     fmap = {ex.submit(process_track, it, args.min_score): it for it in items}
     try:
         for fut in as_completed(fmap):
             it = fmap[fut]
             try:
-                ai, ti, status, lrc = fut.result()
+                ai, ti, status, lrc, src = fut.result()
             except Exception:
-                ai, ti, status, lrc = it[0], it[1], "miss", None
+                ai, ti, status, lrc, src = it[0], it[1], "miss", None, ""
             processed += 1
             done["%d:%d" % (ai, ti)] = status
             if status == "hit":
                 hits_run += 1
+                if src in src_hits:
+                    src_hits[src] += 1
                 hits.setdefault(ai, {})[str(ti)] = lrc
                 touched.add(ai)
             if processed % 50 == 0:
@@ -390,8 +484,8 @@ def main():
         os._exit(130)
     g_hits = sum(1 for v in done.values() if v == "hit")
     g_rate = (g_hits * 100.0 / len(done)) if done else 0.0
-    print("本次完成。累计已处理 %d 项，命中 %d（%.1f%%）；分片目录: %s"
-          % (len(done), g_hits, g_rate, LYR_DIR), flush=True)
+    print("本次完成。累计已处理 %d 项，命中 %d（%.1f%%）；本次命中来源: lrclib %d / 网易云 %d；分片目录: %s"
+          % (len(done), g_hits, g_rate, src_hits["lrclib"], src_hits["netease"], LYR_DIR), flush=True)
     return 0
 
 

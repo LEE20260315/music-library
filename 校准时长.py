@@ -26,6 +26,13 @@ import sys, os, json, threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+# 曲目路径里偶尔有 GBK 表示不了的字符（例如名字里混了 U+FEFF），
+# 直接 print 到重定向文件会 UnicodeEncodeError 把整趟扫描废掉。
+try:
+    sys.stdout.reconfigure(errors='replace')
+except Exception:
+    pass
+
 ROOT = Path(__file__).resolve().parent          # 音乐库根目录
 LIB = ROOT / '无损'
 OUT_JS = ROOT / 'durations.js'
@@ -328,6 +335,7 @@ def main():
         except Exception:
             backup = {}
     fixed = 0
+    plan = []                                    # dry-run 的明细：逐条列出来太吵，写进文件
     for f in files:
         rel = str(f.relative_to(LIB)).replace('\\', '/')
         real = results.get(rel)
@@ -339,7 +347,7 @@ def main():
         if dry:
             # 这里原来写的是 r.get("hdr")，而 r 是 main 里不存在的变量（它在 work()
             # 的局部作用域里），--fix --dry-run 必然 NameError。用循环里的 hdr 才是对的值。
-            print(f'  将修正 {hdr}s -> {real}s  {rel}', flush=True)
+            plan.append(f'{hdr:.3f}\t{real:.3f}\t{rel}')
             fixed += 1
             continue
         old = patch_header(f, real, sr)
@@ -352,7 +360,9 @@ def main():
         BACKUP.write_text(json.dumps(backup, ensure_ascii=False), encoding='utf-8')
         print(f'已修正 {fixed} 个文件的头部时长，原值备份在 {BACKUP.name}', flush=True)
     else:
-        print(f'预览：将修正 {fixed} 个文件（未写入）', flush=True)
+        plan_path = ROOT / '.时长预览.txt'
+        plan_path.write_text('\n'.join(plan), encoding='utf-8')
+        print(f'预览：将修正 {fixed} 个文件（未写入）。明细见 {plan_path.name}', flush=True)
 
 
 if __name__ == '__main__':
