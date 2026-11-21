@@ -28,9 +28,19 @@ h1 .dot{color:var(--terra)}.sub{font-family:var(--serif);font-size:16px;color:va
 /* 页头右上角：主题与入库两个按钮竖着排。标题给右边留出这段宽度，
    否则在大标题又长又宽的时候（1424 宽下 h1 正好顶到边）会压到字上。 */
 header{padding-right:126px}
-.hactions{position:absolute;right:0;top:38px;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
-.theme-btn{border:1px solid var(--line);background:var(--paper-2);color:var(--ink-soft);border-radius:999px;width:38px;height:38px;cursor:pointer;font-size:16px;line-height:1;transition:.2s;display:flex;align-items:center;justify-content:center}
-.theme-btn:hover{border-color:var(--terra);color:var(--terra)}
+.hactions{position:absolute;right:0;top:34px;display:flex;flex-direction:column;align-items:flex-end;gap:18px}
+.theme-btn{border:1px solid var(--line);background:var(--paper-2);color:var(--ink-soft);border-radius:999px;width:40px;height:40px;cursor:pointer;transition:.2s;display:flex;align-items:center;justify-content:center}
+.theme-btn:hover{border-color:var(--terra);color:var(--terra);transform:translateY(-1px)}
+/* 图标用 Lucide（ISC 许可）的太阳 / 月亮，线条比字体里的 ☾ ☀ 匀称得多 */
+.ico{width:19px;height:19px;stroke:currentColor;stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round;display:block}
+.ico.f{fill:currentColor;stroke:none}
+.tbtn .ico{width:18px;height:18px}
+.tbtn.sm .ico{width:15px;height:15px}
+.mode-btn .ico{width:18px;height:18px;stroke-width:1.9}
+.mini .ico{width:15px;height:15px}
+.theme-btn .ic-sun{display:none}
+html[data-theme="night"] .theme-btn .ic-sun{display:block}
+html[data-theme="night"] .theme-btn .ic-moon{display:none}
 /* 窄屏：右上角那两个按钮不再压在小标题上，改成跟在标题后面正常占位 */
 @media(max-width:620px){
   header{padding:26px 0 16px}
@@ -97,7 +107,7 @@ header{padding-right:126px}
 .vinyl-label{position:relative;z-index:2;box-shadow:inset 0 0 0 1px rgba(255,255,255,.22),0 1px 8px #0008}
 .vinyl-label::before{content:"";position:absolute;inset:5%;border-radius:50%;border:1px solid rgba(255,255,255,.28);pointer-events:none}
 .vinyl-label::after{z-index:3}
-.fade-btn{border:1px solid var(--line);background:var(--paper-2);color:var(--ink-soft);border-radius:999px;padding:6px 11px;font-size:11px;cursor:pointer;transition:.2s}
+.fade-btn{border:1px solid var(--line);background:var(--paper-2);color:var(--ink-soft);border-radius:999px;padding:3px 9px;font-size:10.5px;line-height:1.5;cursor:pointer;transition:.2s;white-space:nowrap}
 .fade-btn.on{background:var(--terra);border-color:var(--terra);color:#fff}
 /* 播放模式：一个按钮循环切换 顺序 → 单曲循环 → 乱序，图标自己说明状态 */
 .mode-btn{border:1px solid var(--line);background:var(--paper-2);color:var(--ink-soft);border-radius:999px;width:34px;height:34px;cursor:pointer;font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;transition:.2s;flex:none}
@@ -153,7 +163,11 @@ body.has-mini{padding-bottom:66px}
 @media(prefers-reduced-motion:reduce){.player.open,.player.open.closing{animation-duration:.01s}}
 .pbar{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--paper) 93%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:12px 26px;display:flex;align-items:center;justify-content:space-between}
 .close-btn{border:1px solid var(--line);background:var(--paper-2);color:var(--ink);border-radius:999px;padding:7px 16px;cursor:pointer;font-size:13px}.close-btn:hover{border-color:var(--terra);color:var(--terra)}
-.pinner{max-width:1340px;margin:0 auto;padding:10px 24px 10px;flex:1;min-height:0;display:flex;flex-direction:column;gap:9px;width:100%}
+/* 唱片页三块并列：左「关于艺人」· 中「播放器」· 右「关于专辑」。
+   中间的播放器整体包在 .pstage 里（黑胶 + 曲目列表 + 歌词），和左右两张卡片同高、顶部齐平。 */
+.pinner{max-width:1440px;margin:0 auto;padding:10px 24px;flex:1;min-height:0;width:100%;
+  display:grid;grid-template-areas:"artist stage album";
+  grid-template-columns:minmax(196px,236px) minmax(0,1fr) minmax(196px,236px);gap:18px;align-items:stretch}
 .ptop{display:grid;grid-template-columns:168px 1fr;gap:24px;align-items:center}
 @media(max-width:760px){.ptop{grid-template-columns:1fr;justify-items:center;text-align:center}}
 .vinyl-stage{position:relative;width:168px;height:168px}
@@ -192,6 +206,8 @@ body.has-mini{padding-bottom:66px}
 .chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:6px}
 .chip{font-size:10.5px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--ink-soft);background:var(--paper-2)}.chip.hi{color:var(--terra);border-color:var(--terra-2)}
 .transport{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:5px}
+/* 淡入淡出顶到行末：右边缘和上面进度条右边的「4:53」对齐 */
+.transport .fade-btn{margin-left:auto}
 .tbtn{border:0;background:var(--ink);color:var(--paper);border-radius:50%;width:46px;height:46px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:.2s;flex:none}
 .tbtn:hover{background:var(--terra);transform:scale(1.05)}
 .tbtn.sm{width:36px;height:36px;background:var(--paper-2);color:var(--ink);border:1px solid var(--line);font-size:13px}
@@ -209,17 +225,20 @@ body.has-mini{padding-bottom:66px}
 .prog.dragging .tip,.prog:hover .tip{opacity:.92}
 .time{font-size:11px;color:var(--ink-faint);font-variant-numeric:tabular-nums;min-width:38px;text-align:left;user-select:none}
 .time.right{text-align:right}
-.vol{display:flex;align-items:center;gap:7px;color:var(--ink-faint);font-size:12px;width:100%;margin-top:1px}.vol input{accent-color:var(--terra);width:110px}
-.now{font-size:12px;color:var(--ink-soft);margin-top:2px;min-height:15px}.now b{color:var(--terra)}
-/* 专辑页主体：一屏三块 —— 关于艺人（左，独立卡片）| 曲目+歌词（中）| 关于专辑（右，独立卡片）
-   左右两张卡片和首页「库的足迹」用同一套样式：圆角、底色、serif 标题、正文级字号。
-   高度吃满 .pinner 剩下的空间，任何一栏都不许把整页撑出滚动条。 */
-.pbody{display:grid;gap:18px;flex:1;min-height:0;
-  grid-template-areas:"artist tracks lyrics album";
-  grid-template-columns:minmax(210px,248px) minmax(200px,272px) minmax(0,1fr) minmax(210px,248px)}
-.pcol{grid-area:auto;position:relative;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;
+.vol{display:flex;align-items:center;gap:7px;color:var(--ink-faint);font-size:12px;flex:none;margin:0}.vol input{accent-color:var(--terra);width:96px}
+/* 正在播放 + 音量同一行：文字左对齐、音量靠右（与时间右对齐） */
+.nowrow{display:flex;align-items:center;gap:14px;margin-top:2px;min-height:17px}
+.now{flex:1;min-width:0;font-size:12px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.now b{color:var(--terra)}
+/* 中间那一列的容器：黑胶与曲目信息在上，曲目列表与歌词在下 */
+.pstage{grid-area:stage;min-width:0;min-height:0;display:flex;flex-direction:column;gap:10px}
+.pinner>.pcol.api{grid-area:artist}.pinner>.pcol.alb{grid-area:album}
+/* 播放器内部：左曲目、右歌词，各自内部滚动，整页不出滚动条 */
+.pbody{display:grid;gap:16px;flex:1;min-height:0;
+  grid-template-areas:"tracks lyrics";
+  grid-template-columns:minmax(190px,258px) minmax(0,1fr)}
+/* 左右两张卡片和首页「库的足迹」用同一套样式：圆角、底色、serif 标题、正文级字号 */
+.pcol{position:relative;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;
   background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:18px 17px;box-shadow:var(--shadow)}
-.pcol.api{grid-area:artist}.pcol.alb{grid-area:album}
 .pcol-h{flex:none;font-family:var(--serif);font-size:17px;color:var(--terra);margin:0 0 10px;font-weight:600;line-height:1.2}
 .pcol-t{flex:1;min-height:0;overflow-y:auto;font-size:13px;line-height:1.9;color:var(--ink-soft);white-space:pre-wrap;
   -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 5%,#000 95%,transparent 100%);
@@ -227,24 +246,34 @@ body.has-mini{padding-bottom:66px}
   -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
 .pcol-t.muted{color:var(--ink-faint);font-style:italic;font-family:var(--serif)}
 /* 播放页不重复首页那句脚注：这一行字在首页已经有了，留在唱片页只是从歌词区抢走 30px */
-.player>.pinner>.footer{display:none}
+.pstage>.footer{display:none}
 .pbody>.panel{grid-area:tracks;min-width:0;min-height:0;display:flex;flex-direction:column}
 .panel{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
 /* 窄一点就先并成两行（曲目+歌词在上，两张卡片在下），一屏仍然装得下。
    下面这行给 150px：96px 只够塞两行字，读完就得滚。 */
+/* 窄了就把左右两张卡片挪到播放器下面并排，播放器独占上面整行（一屏仍然装得下） */
 @media(max-width:1199px){
-  .pbody{grid-template-areas:"tracks lyrics" "artist album";
-    grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) 150px;gap:14px}
+  .pinner{grid-template-areas:"stage stage" "artist album";grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    grid-template-rows:minmax(0,1fr) 150px;gap:14px}
+  .pstage{grid-area:stage}.pcol.api{grid-area:artist}.pcol.alb{grid-area:album}
   .pcol{padding:14px 15px}
   .pcol-h{font-size:15px;margin-bottom:7px}
 }
 /* 手机上一条一列：曲目框、歌词、两段文字都给死高度，
    不能用 auto —— .pcol 有 min-height:0，auto 行会塌成 0，两段文字直接看不见。 */
+/* 手机上：整页纵向滚动，三块按内容自然排下去。
+   行高必须给 auto——写死 1fr 会让中间那块被压扁，内容溢到下面的卡片上。 */
 @media(max-width:760px){
-  .pbody{grid-template-areas:"tracks" "lyrics" "artist" "album";
-    grid-template-columns:minmax(0,1fr);
-    grid-template-rows:minmax(150px,30vh) 40vh 168px 168px;gap:14px;overflow-y:auto}
-  .pcol-t{max-height:none}
+  .pinner{grid-template-areas:"stage" "artist" "album";grid-template-columns:minmax(0,1fr);
+    grid-template-rows:auto auto auto;gap:14px;overflow-y:auto}
+  .pbody{grid-template-areas:"tracks" "lyrics";grid-template-columns:minmax(0,1fr);
+    grid-template-rows:minmax(140px,26vh) 40vh;gap:14px}
+  /* min-height:auto 是关键：默认的 min-height:0 允许中间这块被压到比内容还矮，
+     内容就会溢出去压住下面的两张卡片。 */
+  .pstage{min-height:auto;flex:none}
+  .pbody{min-height:auto}
+  .pcol{min-height:168px}
+  .pcol-t{max-height:130px}
 }
 .panel h3{font-family:var(--serif);font-size:14px;margin:0 0 10px;color:var(--terra);display:flex;align-items:center;gap:7px}
 .panel h3::before{content:"";width:4px;height:13px;background:var(--terra);border-radius:2px}
@@ -267,13 +296,14 @@ body.has-mini{padding-bottom:66px}
    .lyr 的 position:relative 是必须的——没有它，子元素 offsetTop 会以 .player 为基准，
    居中滚动就会算错位置，表现成"高亮有、但不跟着滚"。 */
 .lyrwrap{grid-area:lyrics;position:relative;min-width:0;min-height:0;display:flex;flex-direction:column;padding:0 2px}
-.lyr{position:relative;flex:1;min-height:0;overflow-y:auto;scroll-behavior:smooth;padding:40px 12px 40px 4px;
+.lyr{position:relative;flex:1;min-height:0;overflow-y:auto;scroll-behavior:smooth;padding:40px 14px;text-align:center;
   -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 13%,#000 86%,transparent 100%);
   mask-image:linear-gradient(180deg,transparent 0,#000 13%,#000 86%,transparent 100%);
   -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
-.lyr .line{padding:6px 10px;font-size:15px;color:var(--ink-faint);line-height:1.75;border-radius:8px;transition:color .3s,transform .3s,font-size .25s;translate:0 0;cursor:default}
+.lyr .line{padding:7px 12px;font-size:17px;color:var(--ink-faint);line-height:1.8;border-radius:8px;transition:color .3s;translate:0 0;cursor:default}
 .lyr .line:hover{color:var(--ink-soft)}
-.lyr .line.active{color:#D9772F;font-weight:700;font-size:19px;line-height:1.6;transform:translateX(3px);text-shadow:0 1px 14px rgba(217,119,47,.22)}
+/* 当前行：橙色 + 更大更粗。居中对齐时不再左移，靠字号和颜色拉开层次 */
+.lyr .line.active{color:#D9772F;font-weight:700;font-size:23px;line-height:1.55;text-shadow:0 1px 16px rgba(217,119,47,.26)}
 [data-theme="night"] .lyr .line.active{color:#F2A464}
 /* 换歌时歌词从下方缓缓升起：每行错开 12ms（最多 300ms），配合居中滚动就是"从下往上"。
    动画只碰独立的 translate 属性，所以 .active 的 transform:translateX 不会被覆盖。 */
@@ -313,7 +343,10 @@ body.has-mini{padding-bottom:66px}
 <div class="wrap">
   <header>
     <div class="hactions">
-      <button class="theme-btn" id="themeBtn" title="切换日间 / 夜间" aria-label="切换日间或夜间模式">☾</button>
+      <button class="theme-btn" id="themeBtn" title="切换日间 / 夜间" aria-label="切换日间或夜间模式">
+        <svg class="ico ic-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <svg class="ico ic-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
       <button class="libbtn" id="importBtn" type="button">＋ 专辑入库</button>
     </div>
     <div class="eyebrow">E DRIVE · LOSSLESS COLLECTION</div>
@@ -348,6 +381,10 @@ body.has-mini{padding-bottom:66px}
 <div class="player" id="player">
   <div class="pbar"><button class="close-btn" id="closeBtn">← 返回音乐库</button><span style="font-size:10px;color:var(--ink-faint);letter-spacing:.12em">NOW PLAYING</span></div>
   <div class="pinner">
+    <!-- 关于艺人：最左一列，和「库的足迹」同款卡片 -->
+    <section class="pcol api"><div class="pcol-h">关于艺人</div><div class="pcol-t" id="pArtistInfo">—</div></section>
+    <!-- 中间一列：黑胶 + 曲目信息在上，曲目列表与歌词在下 -->
+    <div class="pstage">
     <div class="ptop">
       <div class="vinyl-stage">
         <div class="vinyl" id="vinyl"><div class="label vinyl-label" id="plabel"></div></div>
@@ -400,33 +437,35 @@ body.has-mini{padding-bottom:66px}
         <div class="artist" id="pArtist">—</div>
         <div class="chips" id="pChips"></div>
         <div class="transport">
-          <button class="tbtn sm" id="prevBtn" title="上一首">⏮</button>
-          <button class="tbtn" id="playBtn" title="播放/暂停">▶</button>
-          <button class="tbtn sm" id="nextBtn" title="下一首">⏭</button>
+          <button class="tbtn sm" id="prevBtn" title="上一首"></button>
+          <button class="tbtn" id="playBtn" title="播放/暂停"></button>
+          <button class="tbtn sm" id="nextBtn" title="下一首"></button>
+          <button class="mode-btn" id="modeBtn" type="button" title="播放模式：顺序播放" aria-label="切换播放模式"></button>
+          <!-- 顺序列表 → 单曲循环 → 乱序洗牌，点一下换一种，图标自己说明当前是哪种 -->
+          <!-- 淡入淡出靠 margin-left:auto 顶到行末，正好压在上面「4:53」那个时间的正上方 -->
           <button class="fade-btn" id="fadeBtn" type="button" title="切歌时淡入淡出" aria-pressed="false">淡入淡出：关</button>
-          <button class="mode-btn" id="modeBtn" type="button" title="播放模式：顺序播放" aria-label="切换播放模式">→</button>
-          <!-- 顺序 → 单曲循环 ↻ → 乱序 ⇄，点一下换一种，图标自己说明当前是哪种 -->
         </div>
         <div class="progrow">
           <span class="time" id="time">0:00</span>
           <div class="prog" id="prog" tabindex="0" role="slider" aria-label="播放进度" aria-valuemin="0" aria-valuenow="0"><i id="progIn"></i><span class="knob" id="knob"></span><span class="tip" id="tip">0:00</span></div>
           <span class="time right" id="timeTotal">0:00</span>
         </div>
-        <div class="vol">🔊 <input type="range" id="vol" aria-label="音量" min="0" max="1" step="0.01" value="0.8"><span class="playback-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span></div>
-        <div class="now" id="now">选一首开始播放</div>
+        <div class="nowrow">
+          <div class="now" id="now">选一首开始播放</div>
+          <div class="vol"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg><input type="range" id="vol" aria-label="音量" min="0" max="1" step="0.01" value="0.8"><span class="playback-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span></div>
+        </div>
       </div>
     </div>
     <div class="pbody">
-      <!-- 关于艺人：页面最左，纯文字，没有框也没有底色 -->
-      <section class="pcol api"><div class="pcol-h">关于艺人</div><div class="pcol-t" id="pArtistInfo">—</div></section>
       <!-- 唯一保留的卡片：曲目 -->
       <div class="panel"><h3>曲目</h3><div class="tracks" id="tracks"></div></div>
       <!-- 歌词不要卡片框：占满中间，上下渐隐，当前行橙色放大 -->
       <div class="lyrwrap"><div class="lyr" id="lyrics"></div></div>
-      <!-- 关于专辑：页面最右，纯文字 -->
-      <section class="pcol alb"><div class="pcol-h">关于专辑</div><div class="pcol-t" id="pAlbumInfo">—</div></section>
     </div>
     <div class="footer">唱针落下时，音乐才真正开始。</div>
+    </div><!-- /.pstage -->
+    <!-- 关于专辑：最右一列 -->
+    <section class="pcol alb"><div class="pcol-h">关于专辑</div><div class="pcol-t" id="pAlbumInfo">—</div></section>
   </div>
 </div>
 <!-- 入库预览：先看清楚要加哪几张，再动手写 data.js -->
@@ -448,10 +487,10 @@ body.has-mini{padding-bottom:66px}
   <div class="mc" id="miniCover"></div>
   <div class="mt" id="miniMeta"><b id="miniTitle">—</b><span id="miniArtist">—</span></div>
   <span class="ml" id="miniLyric"></span>
-  <button class="sm" id="miniPrev" title="上一首">⏮</button>
-  <button id="miniPlay" title="播放/暂停">▶</button>
-  <button class="sm" id="miniNext" title="下一首">⏭</button>
-  <button class="sm" id="miniOpen" title="打开唱片页">⤢</button>
+  <button class="sm" id="miniPrev" title="上一首"></button>
+  <button id="miniPlay" title="播放/暂停"></button>
+  <button class="sm" id="miniNext" title="下一首"></button>
+  <button class="sm" id="miniOpen" title="打开唱片页"></button>
 </div>
 <script src="data.js"></script>
 <!-- durations.js 由「校准时长.py」生成：部分 FLAC 的头部时长写成了整张专辑长度，
@@ -601,6 +640,20 @@ let cur=null,curIdx=-1,playing=false,inlineMode=false,inlineWrap=null,curLyricId
 let dragPointer=null,dragging=false,suppressEnded=false;
 let playToken=0,volumeFactor=1,fadeEnabled=false,pausing=false;
 try{fadeEnabled=localStorage.getItem('sirius-fade')==='1';}catch(e){}
+/* 图标统一用 Lucide（ISC 许可）的线性图标：比字体里的 ▶ ⏮ ⏭ 干净、粗细一致 */
+const ICON={
+  prev:'<svg class="ico f" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L10 12z"/></svg>',
+  next:'<svg class="ico f" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l10-7z"/></svg>',
+  play:'<svg class="ico f" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg>',
+  pause:'<svg class="ico f" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5h4v15H7zM13 4.5h4v15h-4z"/></svg>',
+  // 顺序播放 = 整列循环（播完回到第一首），用通行的循环箭头
+  order:'<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>',
+  // 单曲循环 = 循环箭头里带个 1
+  one:'<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/><path d="M11 10h1.5v4.5"/></svg>',
+  // 乱序 = 交叉双箭头
+  shuffle:'<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.8-1.1 2-1.7 3.3-1.7H22"/><path d="m18 2 4 4-4 4"/><path d="M2 6h1.9c1.5 0 2.9.9 3.5 2.3"/><path d="M22 18h-5.9c-1.3 0-2.6-.7-3.3-1.8l-.5-.8"/><path d="m18 22 4-4-4-4"/></svg>'
+};
+function setIcon(el,html){if(el&&el.innerHTML!==html)el.innerHTML=html;}
 function syncPlaybackUI(on=playing){
   playing=on;
   $('vinyl').classList.toggle('spinning',on);$('armGroup').classList.toggle('on',on);
@@ -618,7 +671,10 @@ function syncPlaybackUI(on=playing){
   }
   // 其它卡片不该留着旧状态
   $('main').querySelectorAll('.cover-wrap.is-current').forEach(el=>{if(el!==wrap)el.classList.remove('is-current','is-playing');});
-  for(const b of buttons){b.textContent=on?'❚❚':'▶';b.title=on?'暂停':'播放';b.setAttribute('aria-label',b.title);}
+  for(const b of buttons){
+    // 唱片页那两个按钮用 SVG 图标，首页卡片上的小播放键保持字符（它在封面里，字号小）
+    if(b.id==='playBtn')setIcon(b,on?ICON.pause:ICON.play);else b.textContent=on?'❚❚':'▶';
+    b.title=on?'暂停':'播放';b.setAttribute('aria-label',b.title);}
   renderNow();
   updateMini();
   updateMediaSession();
@@ -639,7 +695,9 @@ function updateMini(){
     const mu=imgUrl(cur);
   cover.innerHTML=mu?'<img src="'+mu+'" alt="">':'<div class="ph">♪</div>';
   }
-  $('miniPlay').textContent=playing?'❚❚':'▶';
+  setIcon($('miniPlay'),playing?ICON.pause:ICON.play);
+  setIcon($('miniPrev'),ICON.prev);setIcon($('miniNext'),ICON.next);
+  $('miniOpen').innerHTML='<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M18 14v5a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19V7.5A1.5 1.5 0 0 1 5 6h5"/></svg>';
   $('miniPlay').title=playing?'暂停':'播放';
   $('miniPlay').setAttribute('aria-label',$('miniPlay').title);
   const d=realDur();
@@ -983,6 +1041,7 @@ async function pauseNow(){
   audio.pause();pausing=false;setVolumeFactor(1);syncPlaybackUI(false);
 }
 function togglePlayback(){if(!cur)return;if(playing||pausing)pauseNow();else playWithFade();}
+setIcon($('prevBtn'),ICON.prev);setIcon($('nextBtn'),ICON.next);setIcon($('playBtn'),ICON.play);
 $('playBtn').onclick=togglePlayback;$('prevBtn').onclick=()=>{if(cur)skipBy(-1);};$('nextBtn').onclick=()=>{if(cur)skipBy(1);};
 // 耳机线控 / 键盘媒体键 / 锁屏控件
 if('mediaSession' in navigator){
@@ -998,13 +1057,14 @@ if('mediaSession' in navigator){
    顺序 play → 单曲循环 one → 乱序 shuffle，点按钮循环切换，记住上次的选择。
    乱序时把剩下的曲目打乱成一个队列，放完一遍再重新洗牌——不是每首都随机，
    否则同一首可能连出三次、有的永远轮不到。 */
-const MODES=[{k:'play',icon:'→',name:'顺序播放'},{k:'one',icon:'↻',name:'单曲循环'},{k:'shuffle',icon:'⇄',name:'乱序播放'}];
+const MODES=[{k:'play',icon:'order',name:'顺序播放'},{k:'one',icon:'one',name:'单曲循环'},{k:'shuffle',icon:'shuffle',name:'乱序播放'}];
 let playMode='play',shuffleQueue=[];
 try{const m=localStorage.getItem('sirius-mode');if(MODES.some(x=>x.k===m))playMode=m;}catch(e){}
 function modeInfo(){return MODES.find(m=>m.k===playMode)||MODES[0];}
 function syncModeBtn(){
   const b=$('modeBtn'),i=modeInfo();
-  b.textContent=i.icon;b.title='播放模式：'+i.name;b.setAttribute('aria-label','播放模式：'+i.name);
+  setIcon(b,ICON[i.icon]||ICON.order);
+  b.title='播放模式：'+i.name;b.setAttribute('aria-label','播放模式：'+i.name);
   b.classList.toggle('on',playMode!=='play');
 }
 function refillShuffle(from){
@@ -1162,7 +1222,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)updateProg
 // 夜间模式记在本地，下次打开还是你上次选的样子
 function applyTheme(n){
   document.documentElement.dataset.theme=n;
-  $('themeBtn').textContent=n==='night'?'☀':'☾';
+  // 图标由 CSS 按 [data-theme] 切换，这里不用再改文字
 }
 let savedTheme='';
 try{savedTheme=localStorage.getItem('sirius-theme')||'';}catch(e){}
