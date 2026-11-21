@@ -247,6 +247,48 @@ def patch_header(path, real, sr, old_write=None):
     return old
 
 
+def restore_header(path, old_total):
+    """把 total_samples 写回备份里的原值（撤销用）。"""
+    with path.open('rb') as fh:
+        blob = fh.read(26)
+    packed = int.from_bytes(blob[18:26], 'big')
+    if (packed & 0xFFFFFFFFF) == old_total:
+        return None
+    new_packed = (packed & ~0xFFFFFFFFF) | (old_total & 0xFFFFFFFFF)
+    with path.open('r+b') as fh:
+        fh.seek(18)
+        fh.write(new_packed.to_bytes(8, 'big'))
+    return True
+
+
+def undo_all():
+    """把所有改过的头部时长按备份原样写回。18756 个文件写到一半断电，
+    这里也能整批救回来——备份是一个文件配一个原值，不依赖顺序。"""
+    if not BACKUP.exists():
+        print('没有找到备份文件，没东西可撤销：', BACKUP.name)
+        return
+    try:
+        backup = json.loads(BACKUP.read_text(encoding='utf-8'))
+    except Exception as e:
+        print('备份文件读不出来：', e)
+        return
+    n = skipped = 0
+    for rel, old in backup.items():
+        p = LIB / rel
+        if not p.exists():
+            skipped += 1
+            continue
+        try:
+            if restore_header(p, int(old)):
+                n += 1
+                if n % 500 == 0:
+                    print(f'  已还原 {n} 个…', flush=True)
+        except Exception:
+            skipped += 1
+    print(f'撤销完成：还原 {n} 个文件，跳过 {skipped} 个（文件不在或写不进去）。', flush=True)
+    print('备份文件保留未删，确认无误后可以自己删掉 ' + BACKUP.name, flush=True)
+
+
 def all_flac():
     out = []
     for dirpath, _, filenames in os.walk(LIB):
@@ -260,6 +302,10 @@ def all_flac():
 def main():
     do_fix = '--fix' in sys.argv
     dry = '--dry-run' in sys.argv
+
+    if '--undo' in sys.argv:
+        undo_all()
+        return
 
     if not LIB.is_dir():
         print('找不到无损目录：', LIB)
@@ -354,7 +400,10 @@ def main():
         if old is not None:
             backup[rel] = old
             fixed += 1
+            # 边改边存：18756 个文件要写好一会儿，中途断了、拔盘了，
+            # 已改的那部分必须在备份里，否则 --undo 救不回来。
             if fixed % 200 == 0:
+                BACKUP.write_text(json.dumps(backup, ensure_ascii=False), encoding='utf-8')
                 print(f'  已修正 {fixed} 个…', flush=True)
     if not dry:
         BACKUP.write_text(json.dumps(backup, ensure_ascii=False), encoding='utf-8')
