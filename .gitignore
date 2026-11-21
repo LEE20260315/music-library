@@ -1,4 +1,4 @@
-﻿无损/
+无损/
 有损/
 _covers/
 __pycache__/
@@ -16,3 +16,4 @@ _校准修正.log
 .时长修正备份.json
 _probe*.html
 _shot*.png
+_重复待删/
