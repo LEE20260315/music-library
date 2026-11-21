@@ -12,3 +12,5 @@ data.js.bak-*
 durations.js.bak-*
 .时长预览.txt
 _probe.html
+_校准修正.log
+.时长修正备份.json
