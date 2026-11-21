@@ -14,3 +14,5 @@ durations.js.bak-*
 _probe.html
 _校准修正.log
 .时长修正备份.json
+_probe*.html
+_shot*.png
