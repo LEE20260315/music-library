@@ -140,7 +140,7 @@ body.has-mini{padding-bottom:66px}
 @media(prefers-reduced-motion:reduce){.player.open,.player.open.closing{animation-duration:.01s}}
 .pbar{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--paper) 93%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:12px 26px;display:flex;align-items:center;justify-content:space-between}
 .close-btn{border:1px solid var(--line);background:var(--paper-2);color:var(--ink);border-radius:999px;padding:7px 16px;cursor:pointer;font-size:13px}.close-btn:hover{border-color:var(--terra);color:var(--terra)}
-.pinner{max-width:1440px;margin:0 auto;padding:12px 24px 14px;flex:1;min-height:0;display:flex;flex-direction:column;gap:10px;width:100%}
+.pinner{max-width:1440px;margin:0 auto;padding:10px 24px 10px;flex:1;min-height:0;display:flex;flex-direction:column;gap:9px;width:100%}
 .ptop{display:grid;grid-template-columns:168px 1fr;gap:24px;align-items:center}
 @media(max-width:760px){.ptop{grid-template-columns:1fr;justify-items:center;text-align:center}}
 .vinyl-stage{position:relative;width:168px;height:168px}
@@ -173,12 +173,12 @@ body.has-mini{padding-bottom:66px}
 #armGroup.on{transform:rotate(4deg)}
 .arm-sleeve{transition:opacity .4s}
 /* 顶部这一块要压紧：它每高 1px，下面的歌词区就少 1px。所有外边距都收到最小。 */
-.pmeta .p-eyebrow{font-size:10px;letter-spacing:.22em;color:var(--terra);font-weight:700;margin-bottom:3px}
-.pmeta h2{font-family:var(--serif);font-size:clamp(21px,2.4vw,31px);font-weight:600;line-height:1.18;margin:0 0 3px}
-.pmeta .artist{font-family:var(--serif);font-size:16px;color:var(--ink-soft);margin-bottom:8px}
-.chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px}
+.pmeta .p-eyebrow{font-size:10px;letter-spacing:.22em;color:var(--terra);font-weight:700;margin-bottom:2px}
+.pmeta h2{font-family:var(--serif);font-size:clamp(20px,2.2vw,29px);font-weight:600;line-height:1.15;margin:0 0 2px}
+.pmeta .artist{font-family:var(--serif);font-size:15.5px;color:var(--ink-soft);margin-bottom:5px}
+.chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:6px}
 .chip{font-size:10.5px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--ink-soft);background:var(--paper-2)}.chip.hi{color:var(--terra);border-color:var(--terra-2)}
-.transport{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:7px}
+.transport{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:5px}
 .tbtn{border:0;background:var(--ink);color:var(--paper);border-radius:50%;width:46px;height:46px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:.2s;flex:none}
 .tbtn:hover{background:var(--terra);transform:scale(1.05)}
 .tbtn.sm{width:36px;height:36px;background:var(--paper-2);color:var(--ink);border:1px solid var(--line);font-size:13px}
@@ -197,7 +197,7 @@ body.has-mini{padding-bottom:66px}
 .time{font-size:11px;color:var(--ink-faint);font-variant-numeric:tabular-nums;min-width:38px;text-align:left;user-select:none}
 .time.right{text-align:right}
 .vol{display:flex;align-items:center;gap:7px;color:var(--ink-faint);font-size:12px;width:100%;margin-top:1px}.vol input{accent-color:var(--terra);width:110px}
-.now{font-size:12px;color:var(--ink-soft);margin-top:4px;min-height:16px}.now b{color:var(--terra)}
+.now{font-size:12px;color:var(--ink-soft);margin-top:2px;min-height:15px}.now b{color:var(--terra)}
 /* 专辑页主体：一屏四栏 —— 关于艺人（最左，纯文字无框）| 曲目（唯一保留的卡片）| 歌词 | 关于专辑（最右，纯文字无框）
    高度吃满 .pinner 剩下的空间，任何一栏都不许把整页撑出滚动条。 */
 .pbody{display:grid;gap:20px;flex:1;min-height:0;
@@ -211,6 +211,8 @@ body.has-mini{padding-bottom:66px}
   mask-image:linear-gradient(180deg,transparent 0,#000 7%,#000 92%,transparent 100%);
   -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
 .pcol-t.muted{color:var(--ink-faint);font-style:italic;font-family:var(--serif)}
+/* 播放页不重复首页那句脚注：这一行字在首页已经有了，留在唱片页只是从歌词区抢走 30px */
+.player>.pinner>.footer{display:none}
 .pbody>.panel{grid-area:tracks;min-width:0;min-height:0;display:flex;flex-direction:column}
 .panel{background:var(--paper-2);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
 /* 窄一点就先并成两行（曲目+歌词在上，两段文字在下），一屏仍然装得下 */
@@ -265,7 +267,8 @@ body.has-mini{padding-bottom:66px}
 .none{color:var(--ink-faint);font-style:italic;font-family:var(--serif)}
 .footer{text-align:center;color:var(--ink-faint);font-size:10px;padding-top:24px;border-top:1px solid var(--line);margin-top:26px}
 /* 入库按钮条：钉在首页那条横线上面 */
-.libbar{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:26px;padding-top:20px;border-top:1px solid var(--line)}
+/* 按钮就压在首页那条横线（.footer 的上边框）上面，自己不再多画一条线，否则两条线并排 */
+.libbar{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:22px;padding-top:0;border-top:0}
 .libbtn{border:1px solid var(--terra);background:transparent;color:var(--terra);border-radius:999px;padding:8px 20px;font-size:12.5px;cursor:pointer;transition:.2s;font-family:var(--serif)}
 .libbtn:hover{background:var(--terra);color:var(--paper)}
 .libbtn[disabled]{opacity:.55;cursor:progress}
@@ -892,7 +895,10 @@ function renderLyrics(lines){
   box.classList.remove('rising');
   void box.offsetWidth;      // 强制重排，让动画能重新触发
   box.classList.add('rising');
-  syncLyric(true);   // 切歌后立刻定位当前行，不等第一次 timeupdate
+  // 先回到最上面，再滑到当前行：整段歌词从下往上缓缓升起，而不是"啪"地定在那儿。
+  // 从头开始听时目标位置就是 0，这一行不会有位移，靠上面的逐行升起动画补足。
+  box.scrollTop=0;
+  syncLyric('rise');   // 切歌后从顶上滑到当前行，不等第一次 timeupdate
 }
 function syncLyric(force){
   const t=pos(),lines=cur&&cur.tracks[curIdx]&&cur.tracks[curIdx].lyr;
@@ -909,7 +915,8 @@ function syncLyric(force){
   if(el){
     const br=box.getBoundingClientRect(),er=el.getBoundingClientRect();
     const top=box.scrollTop+(er.top-br.top)-(box.clientHeight-er.height)/2;
-    box.scrollTo({top:Math.max(0,top),behavior:force?'auto':'smooth'});
+    // 切歌后的第一次定位用平滑滚动（歌词"升"上去）；拖动进度条时直接跳，否则跟手会发飘
+    box.scrollTo({top:Math.max(0,top),behavior:force==='rise'?'smooth':(force?'auto':'smooth')});
   }
   curLyricIdx=idx;
 }
@@ -1175,8 +1182,11 @@ function addUpdate(date,title,text){
   D.updates=D.updates||[];
   const t=title.length>14?title.slice(0,14):title;
   const day=D.updates.find(u=>u.date===date);
-  if(day){day.title=t;day.text=day.text+'；'+text;}
-  else D.updates.push({date,title:t,text:text});
+  if(day){
+    // 已经有了这一天：标题保持第一次那个（当天做了什么，第一条标题最能概括），
+    // 正文接在后面，接之前先剥掉句末标点，否则会出现「。；」这种断句。
+    day.text=(day.text||'').replace(/[。；;\s]+$/,'')+'；'+text;
+  }else D.updates.push({date,title:t,text:text});
 }
 const impMask=$('impMask'),impList=$('impList'),impNote=$('impNote'),impGo=$('impGo'),impHead=$('impHead');
 let impPlan=[];
@@ -1258,7 +1268,11 @@ async function impCommit(root){
     build();renderStats();renderTimeline();
     const n=impPlan.length;         // 先记下来：impHide 会把 impPlan 清空
     impHide();
-    impShow('入库完成','已写入 '+n+' 张专辑。\ndata.js 的原件备份为 data.js.bak-'+stamp+'。\n若这张盘换到别的电脑，插盘后双击本页即可，路径全是相对的。',[],'');
+    impShow('入库完成','已写入 '+n+' 张专辑。\ndata.js 的原件备份为 data.js.bak-'+stamp+'。\n'+
+      '想让这几张也有歌词和准确时长，回到命令行跑一次：\n'+
+      '  python 补歌词.py --jobs 4\n'+
+      '  python 校准时长.py --fix\n'+
+      '若这张盘换到别的电脑，插盘后双击本页即可，路径全是相对的。',[],'');
     impGo.textContent='好';
     impGo.disabled=false;
     impGo.onclick=impHide;
