@@ -6,3 +6,7 @@ data.js
 durations.js
 _lyrics/
 *.备份-*.html
+*.bak-*
+_校准预览.log
+data.js.bak-*
+durations.js.bak-*
