@@ -485,6 +485,13 @@ body.has-mini{padding-bottom:66px}
 .imp-act button{border-radius:999px;padding:8px 18px;font-size:12.5px;cursor:pointer;border:1px solid var(--line);background:var(--paper-2);color:var(--ink)}
 .imp-act .go{border-color:var(--terra);background:var(--terra);color:#fff}
 .imp-act button[disabled]{opacity:.55;cursor:progress}
+/* 进度条：扫描时要有"在动"的东西，否则用户看到的就是"点了没反应" */
+.imp-bar{height:3px;border-radius:2px;background:var(--line);overflow:hidden;margin:0 0 12px}
+.imp-bar i{display:block;height:100%;width:0;background:var(--terra);transition:width .25s ease}
+/* 清单里的分区标题（可写入 / 待拆分 / 已存在） */
+.imp-sec{font-family:var(--serif);font-size:11px;color:var(--terra);letter-spacing:.08em;padding:12px 2px 5px;border-bottom:1px solid var(--line)}
+.imp-item .iw{font-size:10px;color:var(--terra);white-space:nowrap}
+.imp-item.warn .ia{color:var(--ink-faint)}
 </style>
 </head>
 <body>
@@ -636,6 +643,7 @@ body.has-mini{padding-bottom:66px}
   <div class="imp-box">
     <h4 id="impHead">专辑入库</h4>
     <p class="imp-note" id="impNote">—</p>
+    <div class="imp-bar" id="impBar" hidden><i></i></div>
     <div class="imp-list" id="impList"></div>
     <div class="imp-act">
       <button type="button" id="impCancel">取消</button>
@@ -1721,12 +1729,35 @@ function addUpdate(date,title,text){
     day.text=(day.text||'').replace(/[。；;\s]+$/,'')+'；'+text;
   }else D.updates.push({date,title:t,text:text});
 }
-const impMask=$('impMask'),impList=$('impList'),impNote=$('impNote'),impGo=$('impGo'),impHead=$('impHead');
+const impMask=$('impMask'),impList=$('impList'),impNote=$('impNote'),impGo=$('impGo'),impHead=$('impHead'),impBar=$('impBar');
 let impPlan=[];
+/* 这一个弹层要当三种屏用：进度 / 预览 / 结果。
+   设计上只有一条硬规矩——任何路径都不许"什么都没发生"：
+   取消之外的所有结局，都要有一个能读的标题和一句能照着做的下一步。 */
 function impShow(head,note,items,goText){
-  impHead.textContent=head;impNote.textContent=note;
-  impList.innerHTML=items.map(x=>'<div class="imp-item"><span class="ia">'+esc(x.a)+'</span><span class="in">'+esc(x.b)+'</span>'+(x.c?'<span class="iq">'+esc(x.c)+'</span>':'')+'</div>').join('')||'<div class="imp-item"><span class="in">没有需要入库的专辑。</span></div>';
-  impGo.textContent=goText||'写入';impGo.disabled=!items.length;
+  const list=items||[];
+  const writable=list.filter(x=>!x.sec&&!x.block).length;
+  impHead.textContent=head;
+  impNote.textContent=note||'—';
+  impBar.hidden=true;
+  impList.innerHTML=list.length?list.map(x=>x.sec
+    ?'<div class="imp-sec">'+esc(x.sec)+'</div>'
+    :'<div class="imp-item'+(x.block?' warn':'')+'">'+
+      '<span class="ia">'+esc(x.a)+'</span><span class="in">'+esc(x.b)+'</span>'+
+      (x.w?'<span class="iw">'+esc(x.w)+'</span>':'')+
+      (x.c?'<span class="iq">'+esc(x.c)+'</span>':'')+'</div>'
+  ).join(''):'<div class="imp-item"><span class="in">没有需要入库的专辑。</span></div>';
+  impGo.disabled=false;
+  impGo.onclick=impHide;                    // 默认按下去就是关窗，别留一个按不动的死按钮
+  impGo.textContent=goText||(writable?'写入':'知道了');
+  impMask.hidden=false;
+}
+/* 扫描/读盘时的活口：标题、进度条、说明都要跟着动 */
+function impProgress(head,note,frac){
+  impHead.textContent=head;
+  impNote.textContent=note||'—';
+  impBar.hidden=false;
+  impBar.firstElementChild.style.width=Math.max(2,Math.min(100,Math.round((frac||0)*100)))+'%';
   impMask.hidden=false;
 }
 function impHide(){impMask.hidden=true;impPlan=[];}
@@ -1734,25 +1765,102 @@ $('impCancel').onclick=impHide;
 impMask.addEventListener('click',e=>{if(e.target===impMask)impHide();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!impMask.hidden)impHide();});
 
+/* 整轨 + CUE：一个音频文件 + 一个 .cue，里面写着 12 首。
+   直接按文件数入库会写成"1 首"的专辑，所以这类只登记、不写。 */
+const IMP_CUE_T=/\.cue$/i;
+const impIsCue=h=>h.cues.length>0&&h.files.length<=1;
+
+async function impScan(root,onProgress){
+  let base=root;
+  try{base=await root.getDirectoryHandle('无损');}catch(e){}
+  const artists=await impDirs(base);
+  const hits=[];
+  let done=0;
+  for(const artistDir of artists){
+    for(const albumDir of await impDirs(artistDir)){
+      const files=[],cues=[];
+      const walk=async(dir,depth,prefix)=>{
+        for await(const h of dir.values()){
+          if(h.kind==='file'){
+            if(IMP_AUDIO.test(h.name))files.push({name:h.name,path:prefix+h.name,handle:h});
+            else if(IMP_CUE_T.test(h.name))cues.push(prefix+h.name);
+          }else if(depth<2&&!IMP_SKIP.has(h.name))await walk(h,depth+1,prefix+h.name+'/');
+        }
+      };
+      await walk(albumDir,0,'');
+      if(files.length)hits.push({artist:artistDir.name,dirname:albumDir.name,dir:albumDir,files,cues});
+    }
+    done++;
+    if(onProgress)onProgress(done,artists.length,hits.length,artistDir.name);
+    await new Promise(r=>setTimeout(r,0));   // 让出一帧，进度条才画得出来
+  }
+  return hits;
+}
+async function impAlbum(entry){
+  const mi=impParse(entry.dirname);
+  const files=entry.files.slice().sort((x,y)=>x.name.localeCompare(y.name,'en',{numeric:true}));
+  let cover='';
+  try{for await(const h of entry.dir.values()){if(h.kind==='file'&&IMP_COVER.test(h.name)){cover=h.name;break;}}}catch(e){}
+  if(!mi.quality){
+    for(const f of files){
+      const info=await impFlacInfo(await f.handle.getFile());
+      if(info){mi.quality=info.bps+'bit / '+impKHz(info.sr);break;}
+    }
+  }
+  return {
+    artist:entry.artist,album:mi.album,year:mi.year,quality:mi.quality||'未标注',
+    disc:mi.disc,era:impEra(mi.year),genre:'其他',
+    cover:cover,intro:'',artistInfo:'',
+    rel:'无损/'+entry.artist+'/'+entry.dirname,
+    tracks:files.map(f=>({n:f.name.replace(IMP_AUDIO,'').replace(/^\s*\d{1,3}\s*[-._]\s*/,''),p:f.path})),
+    coverFile:''
+  };
+}
+/* 足迹规则（与 库维护须知.md 一致）：同一天只留一条，标题 ≤14 字，正文用「；」接在后面 */
+function addUpdate(date,title,text){
+  D.updates=D.updates||[];
+  const t=title.length>14?title.slice(0,14):title;
+  const day=D.updates.find(u=>u.date===date);
+  if(day){
+    // 已经有了这一天：标题保持第一次那个（当天做了什么，第一条标题最能概括），
+    // 正文接在后面，接之前先剥掉句末标点，否则会出现「。；」这种断句。
+    day.text=(day.text||'').replace(/[。；;\s]+$/,'')+'；'+text;
+  }else D.updates.push({date,title:t,text:text});
+}
+
 async function impStart(){
   const btn=$('importBtn');
-  if(!window.showDirectoryPicker){impShow('这个浏览器做不到','当前浏览器不支持直接写库。\n用 Chrome 或 Edge 打开本页再试，其余功能不受影响。',[],'');return;}
+  if(!window.showDirectoryPicker){
+    impShow('这个浏览器做不到','当前浏览器不支持直接写库。\n用 Chrome 或 Edge 打开本页再试，其余功能不受影响。',[],'');
+    return;
+  }
   let root;
   try{root=await window.showDirectoryPicker({mode:'readwrite',id:'sirius-musiclib'});}
-  catch(e){return;}                       // 用户自己取消了，什么都不用说
-  if(!(await root.queryPermission({mode:'readwrite'})==='granted')){
-    if((await root.requestPermission({mode:'readwrite'}))!=='granted')return;
+  catch(e){
+    if(e&&e.name==='AbortError')return;      // 自己按了取消，不打扰
+    impShow('目录没打开','浏览器返回：'+(e&&e.message?e.message:e)+'\n可能是页面不在最前面，或上一次的目录选择还没结束。\n再点一次「专辑入库」即可。',[],'');
+    return;
   }
+  try{
+    let st=await root.queryPermission({mode:'readwrite'});
+    if(st!=='granted')st=await root.requestPermission({mode:'readwrite'});
+    if(st!=='granted'){
+      impShow('没有写入权限','浏览器没有给这个目录写权限，data.js 改不了。\n重新点一次「专辑入库」，在浏览器的提示里选「允许编辑」。',[],'');
+      return;
+    }
+  }catch(e){/* 老浏览器可能没有这两个方法，下面真写的时候会再报 */}
   // 选错目录是最容易踩的坑：让人选「无损」而不是库根目录，扫描能过、写 data.js 时才炸。
-  // 这里先探一下 data.js 在不在，不在就直接说清楚该怎么选。
+  // 这里先探一下 data.js 在不在，不在就把该选哪一层说清楚。
   try{await root.getFileHandle('data.js');}
   catch(e){
-    impShow('目录选错了','请选「音乐库」这一层目录（里面能看到 data.js 和 无损 文件夹），\n不要直接选里面的「无损」。\n选对了再点一次「专辑入库」即可。',[],'');
+    impShow('目录选错了','请选「音乐库」这一层（里面能直接看到 data.js 和 无损 文件夹），\n不要选里面的「无损」，也不要选某一张专辑的文件夹。\n选对了再点一次「专辑入库」。',[],'');
     return;
   }
   btn.disabled=true;btn.textContent='扫描中…';
+  impProgress('正在扫描…','读 无损/ 下的艺人文件夹。库有四百多位艺人，第一次会走几十秒，进度条在动就说明在干活。',0);
   try{
-    const hits=await impScan(root);
+    const hits=await impScan(root,(done,total,found,name)=>
+      impProgress('正在扫描… '+done+'/'+total,'当前：'+name+'\n已发现 '+found+' 个有音频的专辑文件夹。',total?done/total:0));
     const seen=new Set(A.map(a=>a.rel.replace(/\\/g,'/').toLowerCase()));
     const seenName=new Set(A.map(a=>a.artist.toLowerCase()+'|'+String(a.album||'').toLowerCase()));
     const fresh=hits.filter(h=>!seen.has(('无损/'+h.artist+'/'+h.dirname).toLowerCase()));
@@ -1761,26 +1869,63 @@ async function impStart(){
       impShow('没有新专辑','扫到 '+hits.length+' 张专辑，库里都已经有了。\ndata.js 没有改动。',[],'');
       return;
     }
-    const albums=[];
-    for(const h of fresh){const al=await impAlbum(h);const k=al.artist.toLowerCase()+'|'+al.album.toLowerCase();if(!seenName.has(k)){seenName.add(k);albums.push(al);}}
+    const cueOnes=fresh.filter(impIsCue);
+    const plain=fresh.filter(h=>!impIsCue(h));
+    const albums=[],same=[];
+    for(let k=0;k<plain.length;k++){
+      if(k%4===0)impProgress('正在读专辑信息… '+(k+1)+'/'+plain.length,'已经排好 '+albums.length+' 张，跳过 '+same.length+' 张。',plain.length?(k+1)/plain.length:1);
+      const al=await impAlbum(plain[k]);
+      const key=al.artist.toLowerCase()+'|'+al.album.toLowerCase();
+      if(seenName.has(key)){same.push(al);continue;}
+      seenName.add(key);albums.push(al);
+    }
     impPlan=albums;
-    const missing=albums.filter(a=>!a.quality||a.quality==='未标注').length;
-    impShow('发现 '+albums.length+' 张新专辑',
-      '写入方式：新专辑追加到 data.js 末尾（不改动已有顺序，否则歌词分片会错位）。\n写之前会先存一份 data.js.bak-时间。'+(missing?'\n另有 '+missing+' 张读不到音质信息，先标成「未标注」。':''),
-      albums.map(a=>({a:a.album||a.rel,b:a.artist+' · '+a.tracks.length+' 曲',c:a.quality})),
-      '写入 '+albums.length+' 张');
+    const items=[];
+    if(albums.length){
+      items.push({sec:'可以写入（'+albums.length+' 张）'});
+      for(const a of albums){
+        const w=[];
+        if(!a.quality||a.quality==='未标注')w.push('读不到音质');
+        if(!a.year)w.push('目录名无年份');
+        if(!a.cover)w.push('无封面图');
+        items.push({a:a.album||a.rel,b:a.artist+' · '+a.tracks.length+' 曲',w:w.join('、'),c:a.quality});
+      }
+    }
+    if(cueOnes.length){
+      items.push({sec:'要先按 CUE 拆分（'+cueOnes.length+' 张，这次不写）'});
+      for(const h of cueOnes){
+        items.push({a:impParse(h.dirname).album||h.dirname,
+          b:h.artist+' · 整轨 '+h.files.length+' 个音频 + '+h.cues[0],
+          w:'待拆分',block:true});
+      }
+    }
+    if(same.length){
+      items.push({sec:'同名专辑已在库里（'+same.length+' 张，跳过）'});
+      for(const a of same)items.push({a:a.album,b:a.artist+' · 目录不同但艺人+专辑名重复',w:'已存在',block:true});
+    }
+    const noQ=albums.filter(a=>!a.quality||a.quality==='未标注').length;
+    const note=[
+      '写入方式：新专辑追加到 data.js 末尾（不改动已有顺序，否则歌词分片会错位），写之前先存一份 data.js.bak-时间。',
+      cueOnes.length?'其中 '+cueOnes.length+' 张是「整轨 + CUE」：整张盘只有一个音频文件，硬写进去会变成 1 首。\n先在命令行跑 python 拆分CUE.py，拆完再点一次入库。':'',
+      noQ?'有 '+noQ+' 张读不到音质信息，先标成「未标注」，不影响播放。':''
+    ].filter(Boolean).join('\n');
+    impShow(albums.length?'发现 '+albums.length+' 张可入库'+(cueOnes.length?'，'+cueOnes.length+' 张待拆分':'')
+                    :'没有可写入的，'+cueOnes.length+' 张待拆分',note,items,
+      albums.length?'写入 '+albums.length+' 张':'');
+    if(albums.length)impGo.onclick=()=>impCommit(root);
     btn.disabled=false;btn.textContent='＋ 专辑入库';
-    impGo.onclick=()=>impCommit(root);
   }catch(err){
     btn.disabled=false;btn.textContent='＋ 专辑入库';
-    impShow('扫描失败','读目录时出错：'+(err&&err.message?err.message:err),[],'');
+    impShow('扫描失败','读目录时出错：'+(err&&err.message?err.message:err)+'\n先确认这个磁盘还连着、目录没被别的程序占着，然后再点一次。',[],'');
   }
 }
 async function impCommit(root){
+  const n=impPlan.length;
+  const trk=impPlan.reduce((k,a)=>k+a.tracks.length,0);
   impGo.disabled=true;impGo.textContent='写入中…';
   try{
     const now=new Date();
-    const p2=n=>String(n).padStart(2,'0');
+    const p2=v=>String(v).padStart(2,'0');
     const stamp=now.getFullYear()+p2(now.getMonth()+1)+p2(now.getDate())+'-'+p2(now.getHours())+p2(now.getMinutes());
     const day=now.getFullYear()+'-'+p2(now.getMonth()+1)+'-'+p2(now.getDate());
     const fh=await root.getFileHandle('data.js');
@@ -1791,29 +1936,27 @@ async function impCommit(root){
     // 2) 追加新专辑：只能 push 到末尾
     for(const al of impPlan){A.push(al);IDX.set(al,A.length-1);}
     D.albums=A;D.generated=day;
-    addUpdate(day,'新专辑入库 '+impPlan.length+' 张',
-      '新增 '+impPlan.length+' 张（'+impPlan.reduce((n,a)=>n+a.tracks.length,0)+' 曲）：'+
-      impPlan.map(a=>a.artist+'《'+a.album+'》').slice(0,4).join('、')+(impPlan.length>4?' 等':''));
+    const before=(D.updates||[]).find(x=>x.date===day);
+    const beforeText=before?before.text:'';
+    addUpdate(day,'新专辑入库 '+n+' 张',
+      '新增 '+n+' 张（'+trk+' 曲）：'+
+      impPlan.map(a=>a.artist+'《'+a.album+'》').slice(0,4).join('、')+(n>4?' 等':''));
     // 3) 整份重写 data.js：格式与原文件一致，中文不转义
     const text='window.LIB_DATA='+JSON.stringify(D)+';';
     const w=await fh.createWritable();await w.write(text);await w.close();
     // 4) 页面就地刷新：数字、足迹、封面墙都要跟着变
     build();renderStats();renderTimeline();
-    const n=impPlan.length;         // 先记下来：impHide 会把 impPlan 清空
-    impHide();
-    impShow('入库完成','已写入 '+n+' 张专辑。\ndata.js 的原件备份为 data.js.bak-'+stamp+'。\n'+
-      '想让这几张也有歌词和准确时长，回到命令行跑一次：\n'+
-      '  python 补歌词.py --jobs 4\n'+
-      '  python 校准时长.py --fix\n'+
-      '若这张盘换到别的电脑，插盘后双击本页即可，路径全是相对的。',[],'');
-    impGo.textContent='好';
-    impGo.disabled=false;
-    impGo.onclick=impHide;
+    impPlan=[];
+    // 5) 结果页把"今天那条足迹"原文贴出来——用户要确认的就是它
+    const u=D.updates.find(x=>x.date===day);
+    const added=u&&u.text&&u.text!==beforeText?u.text.slice(beforeText.replace(/[。；;\s]+$/,'').length).replace(/^；/,''):'';
+    impShow('入库完成：'+n+' 张 / '+trk+' 曲',
+      'data.js 的原件备份为 data.js.bak-'+stamp+'。\n\n'+
+      (beforeText?'今天已经有一条足迹了，按规矩并进同一条，接在末尾：':'今天的足迹已经写进首页右下角那条时间轴：')+
+      '\n「'+(u?u.title:'')+'」'+(beforeText?'…；':'')+added+
+      '\n\n想让这几张也有歌词和准确时长，回到命令行跑一次：\n  python 补歌词.py --jobs 4\n  python 校准时长.py --fix\n路径全是相对的，这张盘换到别的电脑，插上双击本页就能用。',[],'');
   }catch(err){
-    impShow('写入失败','写 data.js 时出错：'+(err&&err.message?err.message:err)+'\n如果刚才已经建了 .bak，可以用它覆盖回去。\n请把这段错误告诉我，别自己改 data.js。',[],'');
-    impGo.textContent='知道了';
-    impGo.disabled=false;
-    impGo.onclick=impHide;
+    impShow('写入失败','写 data.js 时出错：'+(err&&err.message?err.message:err)+'\n如果刚才已经建了 .bak，可以用它覆盖回去。\n请把这段错误原样告诉我，别自己改 data.js。',[],'');
   }
 }
 $('importBtn').onclick=impStart;
