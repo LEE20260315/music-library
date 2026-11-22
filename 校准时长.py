@@ -231,6 +231,44 @@ def analyse(path):
             'off': round((first or 0) / sr, 2), 'ok': True}
 
 
+def analyse_wav(path):
+    """WAV 的时长就写在 data 块长度里，本身就是准的，不存在 FLAC 那种
+    "头部时长被写成整张专辑"的问题。这里只为把它们的真实时长也登记进
+    durations.js（否则播放页这几张 wav 专辑的曲目行不显示时长、
+    进度条退回浏览器自己报的数）。"""
+    try:
+        with path.open('rb') as fh:
+            head = fh.read(12)
+            if len(head) < 12 or head[:4] != b'RIFF' or head[8:12] != b'WAVE':
+                return {'err': 'notwav'}
+            sr = ch = bits = None
+            while True:
+                ck = fh.read(8)
+                if len(ck) < 8:
+                    return {'err': 'nodata'}
+                cid, size = ck[:4], int.from_bytes(ck[4:8], 'little')
+                if cid == b'fmt ':
+                    b = fh.read(size)
+                    if len(b) < 16:
+                        return {'err': 'badfmt'}
+                    ch = int.from_bytes(b[2:4], 'little') or 1
+                    sr = int.from_bytes(b[4:8], 'little')
+                    bits = int.from_bytes(b[14:16], 'little') or 16
+                elif cid == b'data':
+                    if not sr:
+                        return {'err': 'nodata'}
+                    real = size / (sr * ch * max(1, bits // 8))
+                    if real <= 0.5 or real > 6 * 3600:
+                        return {'err': 'implausible', 'sr': sr,
+                                'hdr': round(real, 1), 'real': round(real, 1)}
+                    return {'sr': sr, 'hdr': round(real, 2), 'real': round(real, 2),
+                            'off': 0.0, 'ok': True}
+                else:
+                    fh.seek(size + (size & 1), 1)     # RIFF 块按偶数字节对齐
+    except OSError as e:
+        return {'err': type(e).__name__}
+
+
 def patch_header(path, real, sr, old_write=None):
     """只改 STREAMINFO 里的 total_samples 这 40 位，音频数据一个字节都不动。"""
     total = int(round(real * sr))
@@ -289,11 +327,15 @@ def undo_all():
     print('备份文件保留未删，确认无误后可以自己删掉 ' + BACKUP.name, flush=True)
 
 
-def all_flac():
+def all_audio():
+    """扫描范围：FLAC 走帧头解析（头部时长可能是错的），WAV 直接读 data 块长度。
+    以前只收 .flac，库里那 3 张 wav 专辑（37 首）因此在播放页没有时长、
+    进度条也用浏览器自己猜的值。"""
     out = []
     for dirpath, _, filenames in os.walk(LIB):
         for fn in filenames:
-            if fn.lower().endswith('.flac'):
+            low = fn.lower()
+            if low.endswith('.flac') or low.endswith('.wav'):
                 out.append(Path(dirpath) / fn)
     out.sort()
     return out
@@ -311,8 +353,8 @@ def main():
         print('找不到无损目录：', LIB)
         return
 
-    files = all_flac()
-    print(f'共 {len(files)} 个 FLAC 文件，开始扫描…', flush=True)
+    files = all_audio()
+    print(f'共 {len(files)} 个音频文件，开始扫描…', flush=True)
 
     if '--sample' in sys.argv:
         n = int(sys.argv[sys.argv.index('--sample') + 1])
@@ -328,7 +370,7 @@ def main():
     done = [0]
 
     def work(f):
-        r = analyse(f)
+        r = analyse_wav(f) if f.suffix.lower() == '.wav' else analyse(f)
         rel = str(f.relative_to(LIB)).replace('\\', '/')
         with lock:
             done[0] += 1
@@ -367,7 +409,7 @@ def main():
 
     if bad:
         (ROOT / '.时长识别失败.txt').write_text(
-            '\n'.join(f'{r}\t{e}' for r, e in bad), encoding='utf-8')
+            '\n'.join(f'{r}\t{e}' for r, e in sorted(bad)), encoding='utf-8')
 
     if not do_fix:
         print('提示：加 --fix 可以把错误的头部时长直接改正（改完进度条就准了）。', flush=True)
@@ -383,6 +425,8 @@ def main():
     fixed = 0
     plan = []                                    # dry-run 的明细：逐条列出来太吵，写进文件
     for f in files:
+        if f.suffix.lower() != '.flac':      # WAV 没有 STREAMINFO，没有可改的头部时长
+            continue
         rel = str(f.relative_to(LIB)).replace('\\', '/')
         real = results.get(rel)
         if not real:
