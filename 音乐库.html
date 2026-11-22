@@ -2063,33 +2063,48 @@ function addUpdate(date,title,text){
   }else D.updates.push({date,title:t,text:text});
 }
 
-/* 入库有两条路，先走能走通的那条：
-   ① 服务器在跑（http://127.0.0.1:8099/ 打开）→ 交给 music-server.js 直接读写磁盘，
-      完全不碰浏览器的选目录对话框。Chrome 157 在 Windows 上有个已确认的回归：
-      对话框能弹出来、选完目录却立刻 reject 成 AbortError，页面这边无论怎么写都没救。
-   ② 用 file:// 双击打开（没有服务器）→ 退回浏览器自己的 File System Access API。 */
+/* 入库走本机服务：页面 → music-server.js → 磁盘，全程不碰浏览器的选目录对话框。
+   Chrome 157 在 Windows 上有个已确认的回归：showDirectoryPicker() 的对话框能弹出来、
+   选完目录却立刻 reject 成 AbortError（Chromium 582927035 / 582407452 / 583003036），
+   页面这边无论怎么重试都没救，而入库本来就不需要浏览器参与。
+
+   两种打开方式都走这条路：
+   · http://127.0.0.1:8099/ → 同源，直接请求相对地址；
+   · file:// 双击打开 → 页面没有服务，但本机服务多半在跑，用绝对地址请求 127.0.0.1:8099
+     （服务端给了 CORS 白名单，见 music-server.js 的 corsHeaders）。
+   两条都连不上才退回浏览器自己的 File System Access（那条在 Chrome 157 上就是上面那个 bug）。 */
+const API=(location.protocol==='file:')?'http://127.0.0.1:8099/':'';
+
 async function impStart(){
   const btn=$('importBtn');
   ilogReset();
-  if(location.protocol==='http:'||location.protocol==='https:'){
-    btn.disabled=true;btn.textContent='连接服务器…';
-    impProgress('正在连接本机服务…','入库可以不经浏览器：本机服务直接读写 E:\01-音乐。',0);
-    let ping=null;
-    try{ping=await (await fetch('api/ping',{cache:'no-store'})).json();}catch(e){ping=null;}
-    btn.disabled=false;btn.textContent='＋ 专辑入库';
-    if(ping&&ping.ok){
-      ilog('服务器可用：'+ping.albums+' 张专辑'+(ping.local?'，本机可写':'，远程只读'));
-      if(!ping.local){
-        impShow('只能在本机入库',
-          '现在是从远程地址打开的，浏览器和服务都不给写库。\n'+
-          '入库要在这台电脑上用 http://127.0.0.1:8099/ 打开本页做；\n'+
-          '手机 / 平板 / 外网点开只能听，播放不受影响。',[],'');
-        return;
-      }
-      return impServer();
+  btn.disabled=true;btn.textContent='连接服务器…';
+  impProgress('正在连接本机服务…','入库不经浏览器：本机服务直接读写 E:\01-音乐。',0);
+  let ping=null;
+  try{
+    const r=await withTimeout(fetch(API+'api/ping',{cache:'no-store'}),8000,'连接本机服务');
+    ping=await r.json();
+  }catch(e){ping=null;}
+  btn.disabled=false;btn.textContent='＋ 专辑入库';
+  if(ping&&ping.ok){
+    ilog('服务器可用：'+ping.albums+' 张专辑'+(ping.local?'，本机可写':'，远程只读'));
+    if(!ping.local){
+      impShow('只能在本机入库',
+        '现在是从远程地址打开的，浏览器和服务都不给写库。\n'+
+        '入库要在这台电脑上用 http://127.0.0.1:8099/ 打开本页做；\n'+
+        '手机 / 平板 / 外网点开只能听，播放不受影响。',[],'');
+      return;
     }
-    ilog('服务器没有响应 /api/ping，改用浏览器选目录');
+    return impServer();
   }
+  ilog('本机服务没有响应 '+API+'api/ping');
+  if(location.protocol!=='file:'){
+    impShow('本机服务没开','入库要靠 8099 那个服务直接读写磁盘，可它现在没响应。\n'+
+      '双击「启动音乐库服务器.vbs」把它起来，再点一次「专辑入库」。\n'+
+      '播放不受影响，这条只影响入库。',[],'');
+    return;
+  }
+  ilog('改用浏览器自己的选目录（file:// 模式）');
   return impPicker();
 }
 
@@ -2100,7 +2115,7 @@ async function impServer(){
   impProgress('正在扫描…','服务端在列 无损/ 下的目录，已有专辑按目录名直接跳过。',0);
   let scan;
   try{
-    scan=await (await fetch('api/import/scan',{cache:'no-store'})).json();
+    scan=await (await fetch(API+'api/import/scan',{cache:'no-store'})).json();
     if(scan.error)throw new Error(scan.error);
   }catch(e){
     btn.disabled=false;btn.textContent='＋ 专辑入库';
@@ -2148,7 +2163,7 @@ async function impServerCommit(rels){
   ilog('提交写入：'+rels.length+' 张');
   let r;
   try{
-    const res=await fetch('api/import/commit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rels})});
+    const res=await fetch(API+'api/import/commit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rels})});
     r=await res.json();
     if(r.error)throw new Error(r.error);
   }catch(e){

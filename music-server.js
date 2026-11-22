@@ -118,6 +118,11 @@ function safeResolve(urlPath) {
 const IMP_SKIP_DIRS = new Set(['_covers', '_lyrics', '.git', '__pycache__',
   'System Volume Information', '$RECYCLE.BIN', '_重复待删', '_原盘', '_损坏删除',
   '_删除清单', 'node_modules']);
+/* 有意当母带留着的目录：内容已经以 FLAC 形式入库，DSF 只是保底存档，
+   浏览器放不了、也不该再被列进"待入库"里打扰人。按目录名精确匹配。 */
+const IMP_ARCHIVE_DIRS = new Set([
+  '须弥·遣唐录(Sumeru - Impressions of the Glorious Tang Dynasty'
+]);
 /* 能被浏览器直接播的格式才算「能入库」：APE / DSF / DFF / WMA / TTA 这些
    Chrome 解不了，写进 data.js 就是一张点了没声音的专辑，不如当场说清楚。 */
 const IMP_AUDIO_RE = /\.(flac|wav|ape|m4a|mp3|dsf|dff|wv|tta|aiff|alac)$/i;
@@ -126,9 +131,17 @@ const IMP_CUE_RE = /\.cue$/i;
 const IMP_COVER_RE = /^(folder|cover|front|封面)\.(jpe?g|png|webp)$/i;
 const LIB = path.join(ROOT, '无损');
 
+/* 只有「本机直连」才算本地。
+   注意不能只看 remoteAddress：cloudflared / 反向代理会把请求转成 127.0.0.1 发过来，
+   那时公网上的任何人也看起来是"本机"，写库接口就会裸奔。
+   所以再加两道：Host 必须是本机名，且不能带任何转发头。 */
 function isLocal(req) {
   const a = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
-  return a === '127.0.0.1' || a === '::1' || a === 'localhost';
+  if (!(a === '127.0.0.1' || a === '::1')) return false;
+  const host = String(req.headers.host || '').replace(/:\d+$/, '').toLowerCase();
+  if (!(host === '127.0.0.1' || host === 'localhost' || host === '[::1]' || host === '::1')) return false;
+  if (req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.headers['x-real-ip']) return false;
+  return true;
 }
 
 /* data.js 就一句 window.LIB_DATA={…}; 只剥前缀，不碰内容 */
@@ -228,6 +241,7 @@ function scanLibrary() {
     for (const dirname of listDirs(path.join(LIB, artist))) {
       const rel = '无损/' + artist + '/' + dirname;
       if (known.has(rel.toLowerCase())) { knownCount++; continue; }
+      if (IMP_ARCHIVE_DIRS.has(dirname)) { continue; }   // 有意保留的母带存档，不入库也不提醒
       const out = walkAlbum(path.join(LIB, artist, dirname), 0, '', { audio: [], cues: [], cover: '' });
       if (!out.audio.length) continue;                     // 没有音频的目录（残留、空壳）不算
       const mi = parseDirName(dirname);
@@ -320,36 +334,67 @@ function commitImport(rels) {
   return { added: picked.length, tracks: trk, backup: path.basename(bak), total: data.albums.length, update: u, albums: picked };
 }
 
-function sendJson(res, code, obj) {
+/* 从 file:// 双击打开的页面也会来调这些接口，那是个不透明来源（Origin: null）。
+   只对「null」和本机页面放行，别的网站一律不给跨域写库的机会。 */
+function corsHeaders(req) {
+  const o = req.headers.origin || '';
+  // file:// 打开的页面，Origin 一般是字面量 "null"；
+  // 带 --allow-file-access-from-files 启动的浏览器会发 "file://"。两种都认。
+  const fromFile = (o === 'null' || o === 'file://' || o.startsWith('file://'));
+  if (!fromFile && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(o)) return null;
+  return {
+    'Access-Control-Allow-Origin': o,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Max-Age': '600',
+    'Vary': 'Origin'
+  };
+}
+
+function sendJson(req, res, code, obj) {
   const body = Buffer.from(JSON.stringify(obj), 'utf8');
-  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
+  const headers = Object.assign({
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Length': body.length,
+    'Cache-Control': 'no-store'
+  }, corsHeaders(req) || {});
+  headers['Access-Control-Allow-Origin'] = headers['Access-Control-Allow-Origin'] || 'null';
+  res.writeHead(code, headers);
   res.end(body);
 }
 
 function handleApi(req, res, pathname) {
+  // 预检：跨域 POST 会先来一发 OPTIONS，这里必须答得干净
+  if (req.method === 'OPTIONS') {
+    const h = corsHeaders(req);
+    if (!h) { res.writeHead(403); return res.end(); }
+    res.writeHead(204, h);
+    return res.end();
+  }
+
   const local = isLocal(req);
   if (pathname === '/api/ping') {
     const d = readData();
-    return sendJson(res, 200, { ok: true, local, albums: d.data.albums.length });
+    return sendJson(req, res, 200, { ok: true, local, albums: d.data.albums.length });
   }
-  if (!local) return sendJson(res, 403, { error: '入库只能在本机做（用 http://127.0.0.1:8099/ 打开）' });
+  if (!local) return sendJson(req, res, 403, { error: '入库只能在本机做（用 http://127.0.0.1:8099/ 打开）' });
   if (pathname === '/api/import/scan') {
-    try { return sendJson(res, 200, scanLibrary()); }
-    catch (e) { return sendJson(res, 500, { error: String(e && e.message || e) }); }
+    try { return sendJson(req, res, 200, scanLibrary()); }
+    catch (e) { return sendJson(req, res, 500, { error: String(e && e.message || e) }); }
   }
   if (pathname === '/api/import/commit' && req.method === 'POST') {
     let body = '';
     req.on('data', c => { body += c; if (body.length > 1e6) req.destroy(); });
     req.on('end', () => {
       let rels;
-      try { rels = JSON.parse(body || '{}').rels; } catch (e) { return sendJson(res, 400, { error: '请求体不是 JSON' }); }
-      if (!Array.isArray(rels) || !rels.length) return sendJson(res, 400, { error: '没有给出要入库的目录' });
-      try { return sendJson(res, 200, commitImport(rels)); }
-      catch (e) { return sendJson(res, 500, { error: String(e && e.message || e) }); }
+      try { rels = JSON.parse(body || '{}').rels; } catch (e) { return sendJson(req, res, 400, { error: '请求体不是 JSON' }); }
+      if (!Array.isArray(rels) || !rels.length) return sendJson(req, res, 400, { error: '没有给出要入库的目录' });
+      try { return sendJson(req, res, 200, commitImport(rels)); }
+      catch (e) { return sendJson(req, res, 500, { error: String(e && e.message || e) }); }
     });
     return;
   }
-  return sendJson(res, 404, { error: '未知接口' });
+  return sendJson(req, res, 404, { error: '未知接口' });
 }
 
 const server = http.createServer((req, res) => {
