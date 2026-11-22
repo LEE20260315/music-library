@@ -701,13 +701,15 @@ const OFF=window.LIB_OFF||{};   // "艺人/专辑/曲目.flac" -> 这首曲目�
 const BAD=new Set(window.LIB_BAD||[]);   // 磁盘上已经损坏、几乎播不出来的文件
 const A=D.albums;
 /* data.js 没加载成功时 A 是空的：页面会正常画出来，但墙上什么都没有、搜索也搜不到，
-   看起来像"打不开"，其实只是那 13.9MB 没下来。手机上首次打开最容易碰到
-   （弱网 + 大文件，断了之后 <script> 是静默失败的）。
+   看起来像"打不开"，其实只是那 4.5MB 没下来。手机上首次打开最容易碰到
+    （弱网 + 大文件，断了之后 <script> 是静默失败的）。
 
    与其让人对着空墙发呆，不如自己重新拉一遍：data.js 里只有 window.LIB_DATA
    一个赋值语句，同源取回来直接 eval 是安全的（内容是我们自己生成的）。
    sessionStorage 记一次重启次数，避免「重试成功→reload→又失败」无限转圈。 */
 const DATA_MISSING=!A.length;
+// 失败时只重拉一次：每次都是几 MB，弱网下连拉两遍比不重试还糟
+// （真见过一次 6 连拉，13.8MB × 6）。拉不到就把话说清楚，让人自己点。
 
 async function reloadData(url,globalName){
   const r=await fetch(url,{cache:'no-cache'});
@@ -725,37 +727,41 @@ if(DATA_MISSING){
     try{tries=parseInt(sessionStorage.getItem('sirius-data-retry')||'0',10)||0;}catch(e){}
     if(tries>=3){
       if(m)m.innerHTML='<div class="empty" style="line-height:2">'+
-        '<b>专辑数据没能加载</b><br>data.js（约 13.9MB）已经自动重试多次仍未成功。<br>'+
+        '<b>专辑数据没能加载</b><br>data.js（约 4.5MB）已经自动重试多次仍未成功。<br>'+
         '多半是网络太慢或服务器没开。连上再点重试即可。<br>'+
         '<button class="retry-btn" '+
         'onclick="sessionStorage.removeItem(\'sirius-data-retry\');location.reload()">'+
         '<span class="sm-t">再试一次</span><span class="sm-s">RETRY</span></button></div>';
       return;
     }
-    for(let i=1;i<=2;i++){
+    // 只重试一次。弱网下每多一次就是几 MB 白跑，反而更容易彻底失败。
+    {
       try{
         try{sessionStorage.setItem('sirius-data-retry',String(tries+1));}catch(e){}
-        if(m)m.innerHTML='<div class="empty">正在重新载入专辑数据…（第 '+i+' 次）</div>';
+        if(m)m.innerHTML='<div class="empty">正在重新载入专辑数据…</div>';
         await reloadData('data.js','LIB_DATA');
         try{await reloadData('durations.js','LIB_DUR');}catch(e){}
         try{sessionStorage.removeItem('sirius-data-retry');}catch(e){}
         location.reload();return;                  // 数据齐了，整页重来一次最干净
       }catch(e){
-        if(i===2&&m){
+        if(m){
           m.innerHTML='<div class="empty" style="line-height:2">'+
-            '<b>专辑数据没能加载</b><br>data.js（约 13.9MB）下载失败。<br>'+
+            '<b>专辑数据没能加载</b><br>data.js（约 4.5MB）下载失败。<br>'+
             '<span style="font-size:12px;opacity:.7">'+(e&&e.message?e.message:e)+'</span><br>'+
             '<button class="retry-btn" '+
-            'onclick="location.reload()"><span class="sm-t">再试一次</span><span class="sm-s">RETRY</span></button>'+
+            'onclick="sessionStorage.removeItem(\'sirius-data-retry\');location.reload()">'+
+            '<span class="sm-t">再试一次</span><span class="sm-s">RETRY</span></button>'+
             '</div>';
         }
-        await new Promise(s=>setTimeout(s,800));
       }
     }
   })();
 }
-// 页面里任何脚本错误都在顶部露一行，别让它在控制台里默默躺着
+// 页面里任何脚本错误都在顶部露一行，别让它在控制台里默默躺着。
+// 注意：这个监听在捕获阶段，资源 404（比如没有 _lyrics/a1800.js 这种歌词分片）
+// 也会冒上来，e.message 是空的、target 是 <script> —— 那不是页面出错，不能吓人。
 window.addEventListener('error',e=>{
+  if(e&&e.target&&e.target!==window&&e.target.tagName)return;   // 资源加载失败，不是脚本错误
   if(window.__errShown)return;window.__errShown=1;
   const bar=document.createElement('div');
   bar.style.cssText='position:fixed;left:0;right:0;top:0;z-index:9999;padding:8px 14px;font:13px/1.6 system-ui;background:#8c2f22;color:#fff';
@@ -1924,17 +1930,7 @@ function impParse(dirname){
 const impDirs=async dir=>{const out=[];for await(const h of dir.values()){if(h.kind==='directory'&&!IMP_SKIP.has(h.name))out.push(h);}return out;};
 // 扫描与读专辑信息的实现在下面（带 onProgress 那一对）。
 // 这里原来还有一份不带进度的旧实现，两套同名函数并存只会让后来改错地方，已删除。
-// 足迹规则（与 库维护须知.md 一致）：同一天只留一条，标题 ≤14 字，正文用「；」接在后面
-function addUpdate(date,title,text){
-  D.updates=D.updates||[];
-  const t=title.length>14?title.slice(0,14):title;
-  const day=D.updates.find(u=>u.date===date);
-  if(day){
-    // 已经有了这一天：标题保持第一次那个（当天做了什么，第一条标题最能概括），
-    // 正文接在后面，接之前先剥掉句末标点，否则会出现「。；」这种断句。
-    day.text=(day.text||'').replace(/[。；;\s]+$/,'')+'；'+text;
-  }else D.updates.push({date,title:t,text:text});
-}
+// addUpdate 也只剩后面那一份（这里原有一份逐字相同的副本）。
 const impMask=$('impMask'),impList=$('impList'),impNote=$('impNote'),impGo=$('impGo'),impHead=$('impHead'),impBar=$('impBar'),impLog=$('impLog');
 let impPlan=[];
 /* 入库的步骤日志。远端（手机/平板、外网点开）出问题时看不到浏览器控制台，
@@ -2067,11 +2063,139 @@ function addUpdate(date,title,text){
   }else D.updates.push({date,title:t,text:text});
 }
 
+/* 入库有两条路，先走能走通的那条：
+   ① 服务器在跑（http://127.0.0.1:8099/ 打开）→ 交给 music-server.js 直接读写磁盘，
+      完全不碰浏览器的选目录对话框。Chrome 157 在 Windows 上有个已确认的回归：
+      对话框能弹出来、选完目录却立刻 reject 成 AbortError，页面这边无论怎么写都没救。
+   ② 用 file:// 双击打开（没有服务器）→ 退回浏览器自己的 File System Access API。 */
 async function impStart(){
   const btn=$('importBtn');
   ilogReset();
+  if(location.protocol==='http:'||location.protocol==='https:'){
+    btn.disabled=true;btn.textContent='连接服务器…';
+    impProgress('正在连接本机服务…','入库可以不经浏览器：本机服务直接读写 E:\01-音乐。',0);
+    let ping=null;
+    try{ping=await (await fetch('api/ping',{cache:'no-store'})).json();}catch(e){ping=null;}
+    btn.disabled=false;btn.textContent='＋ 专辑入库';
+    if(ping&&ping.ok){
+      ilog('服务器可用：'+ping.albums+' 张专辑'+(ping.local?'，本机可写':'，远程只读'));
+      if(!ping.local){
+        impShow('只能在本机入库',
+          '现在是从远程地址打开的，浏览器和服务都不给写库。\n'+
+          '入库要在这台电脑上用 http://127.0.0.1:8099/ 打开本页做；\n'+
+          '手机 / 平板 / 外网点开只能听，播放不受影响。',[],'');
+        return;
+      }
+      return impServer();
+    }
+    ilog('服务器没有响应 /api/ping，改用浏览器选目录');
+  }
+  return impPicker();
+}
+
+/* 走本机服务：扫描 → 预览 → 写入，三步都在服务端完成 */
+async function impServer(){
+  const btn=$('importBtn');
+  btn.disabled=true;btn.textContent='扫描中…';
+  impProgress('正在扫描…','服务端在列 无损/ 下的目录，已有专辑按目录名直接跳过。',0);
+  let scan;
+  try{
+    scan=await (await fetch('api/import/scan',{cache:'no-store'})).json();
+    if(scan.error)throw new Error(scan.error);
+  }catch(e){
+    btn.disabled=false;btn.textContent='＋ 专辑入库';
+    ilog('服务端扫描失败：'+(e&&e.message?e.message:e));
+    impShow('扫描失败','本机服务没给出结果：'+(e&&e.message?e.message:e)+'\n确认 8099 服务还在跑，再点一次。',[],'');
+    return;
+  }
+  btn.disabled=false;btn.textContent='＋ 专辑入库';
+  const fresh=scan.fresh||[], pending=scan.pending||[], odd=scan.unplayable||[];
+  ilog('扫描完成：新目录 '+fresh.length+' 个，待拆分 '+pending.length+' 个，浏览器放不了 '+odd.length+' 个，跳过 '+scan.knownCount+' 个');
+  if(!fresh.length&&!pending.length&&!odd.length){
+    impShow('没有新专辑','一共 '+scan.artistCount+' 位艺人、'+scan.knownCount+' 张已有专辑已跳过，没有发现新的专辑文件夹。\ndata.js 没有改动。',[],'');
+    return;
+  }
+  const items=[];
+  if(fresh.length){
+    items.push({sec:'可以写入（'+fresh.length+' 张）'});
+    for(const h of fresh){
+      const w=[];
+      if(!h.quality)w.push('读不到音质');
+      if(!h.year)w.push('目录名无年份');
+      if(!h.cover)w.push('无封面图');
+      items.push({a:h.album||h.dirname,b:h.artist+' · '+h.count+' 曲',w:w.join('、'),c:h.quality});
+    }
+  }
+  if(pending.length){
+    items.push({sec:'要先按 CUE 拆分（'+pending.length+' 张，这次不写）'});
+    for(const h of pending)items.push({a:h.album||h.dirname,b:h.artist+' · 整轨 '+h.count+' 个音频 + '+h.cue,w:'待拆分',block:true});
+  }
+  // APE / DSF 这类 Chrome 解不了的格式：写进去就是一张点了没声音的专辑，不如当场说明
+  if(odd.length){
+    items.push({sec:'浏览器放不了这些格式（'+odd.length+' 张，这次不写）'});
+    for(const h of odd)items.push({a:h.album||h.dirname,b:h.artist+' · '+h.count+' 曲',w:'APE / DSF 等，要先转成 FLAC',block:true});
+  }
+  const tail=[pending.length?pending.length+' 张待拆分':'',odd.length?odd.length+' 张格式不支持':''].filter(Boolean).join('，');
+  impShow(fresh.length?'发现 '+fresh.length+' 张可入库'+(tail?'，'+tail:''):'没有可写入的'+(tail?'（'+tail+'）':''),
+    '写入方式：新专辑追加到 data.js 末尾（不改动已有顺序，否则歌词分片会错位），写之前先存一份 data.js.bak-时间。\n'+
+    (pending.length?'其中 '+pending.length+' 张是「整轨 + CUE」：整张盘只有一个音频文件，硬写进去会变成 1 首。\n先在命令行跑 python 拆分CUE.py，拆完再点一次入库。':''),
+    items, fresh.length?'写入 '+fresh.length+' 张':'');
+  if(fresh.length)impGo.onclick=()=>impServerCommit(fresh.map(h=>h.rel));
+}
+
+async function impServerCommit(rels){
+  impGo.disabled=true;impGo.textContent='写入中…';
+  ilog('提交写入：'+rels.length+' 张');
+  let r;
+  try{
+    const res=await fetch('api/import/commit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rels})});
+    r=await res.json();
+    if(r.error)throw new Error(r.error);
+  }catch(e){
+    impGo.disabled=false;impGo.textContent='重试写入';
+    ilog('写入失败：'+(e&&e.message?e.message:e));
+    impShow('写入失败','服务端写 data.js 时出错：'+(e&&e.message?e.message:e)+'\n已有的 .bak 可以用来还原，别自己改 data.js。',[],'');
+    return;
+  }
+  ilog('已写入 '+r.added+' 张 / '+r.tracks+' 曲，备份 '+r.backup);
+  // 页面就地更新：数据、数字、足迹、封面墙一起变，不用整页重载
+  for(const al of (r.albums||[])){if(!IDX.has(al)){A.push(al);IDX.set(al,A.length-1);}}
+  D.albums=A;
+  if(r.update){
+    const day=r.update.date;
+    const i=(D.updates||[]).findIndex(x=>x.date===day);
+    if(i>=0)D.updates[i]=r.update;else (D.updates=D.updates||[]).push(r.update);
+  }
+  const today=new Date(),p2=v=>String(v).padStart(2,'0');
+  D.generated=today.getFullYear()+'-'+p2(today.getMonth()+1)+'-'+p2(today.getDate());
+  build();renderStats();renderTimeline();
+  impShow('入库完成：'+r.added+' 张 / '+r.tracks+' 曲',
+    'data.js 的原件备份为 '+r.backup+'，库里现在共 '+r.total+' 张。\n\n'+
+    '今天的足迹已并进 '+r.update.date+' 那一条：\n「'+r.update.title+'」\n'+r.update.text+'\n\n'+
+    '想让新专辑也有歌词和准确时长，在命令行跑一次：\n  python 补歌词.py --jobs 4\n  python 校准时长.py --fix',[],'');
+}
+
+/* 没有服务器（file:// 双击打开）时的老路径：浏览器自己选目录、自己写 data.js */
+async function impPicker(){
+  const btn=$('importBtn');
   if(!window.showDirectoryPicker){
-    impShow('这个浏览器做不到','当前浏览器不支持直接写库。\n用 Chrome 或 Edge 打开本页再试，其余功能不受影响。',[],'');
+    // 两种原因要分开说，否则人会一直在同一个地址上重试：
+    // ① 地址不是安全上下文——http:// 加局域网 IP 就是这样，Chrome 会把
+    //    showDirectoryPicker 整个拿掉（typeof 直接 undefined），换浏览器也没用；
+    //    127.0.0.1 / localhost / https 才算安全来源。
+    // ② 浏览器本身太旧，或不是 Chrome / Edge 内核。
+    const insecure=!window.isSecureContext;
+    impShow(insecure?'这个地址不能写入':'这个浏览器做不到',
+      insecure
+        ? '当前地址不是「安全来源」，浏览器不给页面目录写入权，换浏览器也没用。\n'+
+          '现在用的是：'+location.protocol+'//'+location.host+'\n\n'+
+          '能写入的只有这两种地址：\n'+
+          '· http://127.0.0.1:8099/ 或 http://localhost:8099/ —— 就在这台电脑上操作\n'+
+          '· https:// 开头的地址\n\n'+
+          '注意 http:// 加局域网 / Tailscale 的 IP（如 192.168.x.x）不算，手机平板连过来也一样。\n'+
+          '所以入库要在本机打开 127.0.0.1 那个地址来做；播放不受影响，任何地址都能听。'
+        : '当前浏览器不支持直接写库。\n用 Chrome 或 Edge 打开本页再试，其余功能不受影响。',
+      [],'');
     return;
   }
   // 点下去就先给反馈：选目录的对话框在另一层，页面自己不会有任何变化，
@@ -2095,9 +2219,10 @@ async function impStart(){
       return;
     }
     if(nm==='TimeoutError'){
-      impShow('选择目录没有回应','等了两分钟，浏览器一直没把目录交回来。常见原因：\n'+
+      impShow('选择目录没有回应','等了 90 秒，浏览器一直没把目录交回来。常见原因：\n'+
         '· 选目录的窗口被别的窗口挡住了，没注意到\n'+
         '· 上一次的目录选择还开着，这次的点按被忽略\n'+
+        '· 选目录窗口开在了另一个屏幕上，这边只看到按钮没动静\n'+
         '先看一下是不是还有目录窗口开着，关掉它，再点一次「专辑入库」。',[],'');
       return;
     }
