@@ -363,6 +363,67 @@ function sendJson(req, res, code, obj) {
   res.end(body);
 }
 
+/* 目录浏览：页面上没法调系统的选目录框（Chrome 157 那个回归），
+   就由服务端列目录，点着往下走。只列子目录，不列文件内容，够用且快。 */
+function listPlaces() {
+  const out = [];
+  if (process.platform === 'win32') {
+    for (let i = 67; i <= 90; i++) {
+      const d = String.fromCharCode(i) + ':\\';
+      if (fs.existsSync(d)) out.push({ name: d, path: d });
+    }
+  } else {
+    out.push({ name: '/', path: '/' });
+  }
+  return out;
+}
+function browseDir(dir) {
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  const dirs = entries.filter(e => e.isDirectory() && !IMP_SKIP_DIRS.has(e.name) && !e.name.startsWith('.'))
+    .map(e => ({ name: e.name, path: path.join(dir, e.name) }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+  const parent = path.dirname(dir);
+  const audio = entries.filter(e => e.isFile() && IMP_AUDIO_RE.test(e.name)).length;
+  const cues = entries.filter(e => e.isFile() && IMP_CUE_RE.test(e.name)).length;
+  return {
+    dir, parent: parent === dir ? null : parent, dirs,
+    looksAlbum: audio > 0, audio, cues,
+    places: dir === '.' ? listPlaces() : undefined
+  };
+}
+
+/* 读请求体：上限 1 MB，超过直接断开（这里只收几个路径字符串） */
+function readBody(req, res, cb) {
+  let body = '';
+  req.on('data', c => { body += c; if (body.length > 1e6) req.destroy(); });
+  req.on('end', () => cb(body));
+}
+
+/* 调 导入文件夹.py：拆碟要跑几分钟，所以不设短超时；
+   标准输出是一行 JSON，解析失败时把 stderr 原样还给页面，别让人对着空结果猜。 */
+function runPy(args, done) {
+  const { spawn } = require('child_process');
+  const py = process.platform === 'win32' ? 'python' : 'python3';
+  const child = spawn(py, [path.join(ROOT, '导入文件夹.py')].concat(args), {
+    cwd: ROOT,
+    env: Object.assign({}, process.env, { PYTHONIOENCODING: 'utf-8' })
+  });
+  let out = '', err = '';
+  child.stdout.on('data', d => { out += d.toString('utf8'); });
+  child.stderr.on('data', d => { err += d.toString('utf8'); });
+  child.on('error', e => done({ code: -1, err: '起不了 python：' + e.message }));
+  child.on('close', code => {
+    let json = null;
+    for (const line of out.trim().split(/\r?\n/).reverse()) {
+      const s = line.trim();
+      if (!s.startsWith('{')) continue;
+      try { json = JSON.parse(s); } catch (e) {}
+      if (json) break;
+    }
+    done({ code, json: json || null, err: (err || out).slice(-1500) });
+  });
+}
+
 function handleApi(req, res, pathname) {
   // 预检：跨域 POST 会先来一发 OPTIONS，这里必须答得干净
   if (req.method === 'OPTIONS') {
@@ -383,16 +444,54 @@ function handleApi(req, res, pathname) {
     catch (e) { return sendJson(req, res, 500, { error: String(e && e.message || e) }); }
   }
   if (pathname === '/api/import/commit' && req.method === 'POST') {
-    let body = '';
-    req.on('data', c => { body += c; if (body.length > 1e6) req.destroy(); });
-    req.on('end', () => {
+    return readBody(req, res, body => {
       let rels;
       try { rels = JSON.parse(body || '{}').rels; } catch (e) { return sendJson(req, res, 400, { error: '请求体不是 JSON' }); }
       if (!Array.isArray(rels) || !rels.length) return sendJson(req, res, 400, { error: '没有给出要入库的目录' });
       try { return sendJson(req, res, 200, commitImport(rels)); }
       catch (e) { return sendJson(req, res, 500, { error: String(e && e.message || e) }); }
     });
-    return;
+  }
+
+  /* 目录浏览：GET 不好带长中文路径，统一用 POST 传 dir */
+  if (pathname === '/api/browse' && req.method === 'POST') {
+    return readBody(req, res, body => {
+      let o = {};
+      try { o = JSON.parse(body || '{}'); } catch (e) {}
+      try {
+        if (!o.dir) return sendJson(req, res, 200, { places: listPlaces(), dir: null });
+        const d = path.resolve(o.dir);
+        if (!fs.existsSync(d) || !fs.statSync(d).isDirectory())
+          return sendJson(req, res, 400, { error: '目录不存在：' + d });
+        return sendJson(req, res, 200, browseDir(d));
+      } catch (e) { return sendJson(req, res, 500, { error: String(e && e.message || e) }); }
+    });
+  }
+
+  /* ---- 从别处（D 盘、下载目录、移动硬盘）导入整个文件夹 ----
+     这是「选一个目录把里面的专辑搬进库」，跟上面扫 无损/ 是两件事。
+     真正的活交给 导入文件夹.py：它认得「一个 wav + 一个 cue」的整轨碟（按 CUE 拆）、
+     也认得一堆 flac 的普通专辑（直接复制），并复用 拆分CUE.py 的 CUE 解析。 */
+  if (pathname === '/api/import/probe' && req.method === 'POST') {
+    return readBody(req, res, body => {
+      let dir;
+      try { dir = JSON.parse(body || '{}').dir; } catch (e) { return sendJson(req, res, 400, { error: '请求体不是 JSON' }); }
+      if (!dir || typeof dir !== 'string') return sendJson(req, res, 400, { error: '没有给出目录' });
+      if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory())
+        return sendJson(req, res, 400, { error: '目录不存在：' + dir });
+      runPy(['--probe', dir], r => sendJson(req, res, r.code === 0 ? 200 : 500, r.json || { error: r.err }));
+    });
+  }
+  if (pathname === '/api/import/folder' && req.method === 'POST') {
+    return readBody(req, res, body => {
+      let o;
+      try { o = JSON.parse(body || '{}'); } catch (e) { return sendJson(req, res, 400, { error: '请求体不是 JSON' }); }
+      if (!o.dir) return sendJson(req, res, 400, { error: '没有给出目录' });
+      const args = ['--import-root', o.dir];
+      if (o.dry) args.push('--dry-run');
+      if (o.only) args.push('--only', o.only);
+      runPy(args, r => sendJson(req, res, r.code === 0 ? 200 : 500, r.json || { error: r.err }));
+    });
   }
   return sendJson(req, res, 404, { error: '未知接口' });
 }

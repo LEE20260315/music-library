@@ -26,8 +26,10 @@ html,body{height:100%}
 /* 首页钉死一屏：滚动只发生在内部容器里，页面本身不出现那根竖条 */
 body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.7;overflow:hidden;transition:background .4s,color .4s}
 body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.3;background-image:radial-gradient(var(--line) .6px,transparent .6px);background-size:22px 22px}
+/* 页面按 1440px 宽设计，其它宽度靠 --fit 整体等比缩放（见 fitToViewport）。
+   缩放放在 :root 的 zoom 上，所以这里的高度要除回去，否则 100vh 会被再放大一次。 */
 .wrap{position:relative;z-index:1;max-width:1760px;margin:0 auto;padding:0 28px 12px;
-  height:100vh;display:flex;flex-direction:column}
+  height:calc(100vh / var(--fit,1));display:flex;flex-direction:column}
 header{padding:30px 0 14px;position:relative;flex:none}
 .eyebrow{font-size:11px;letter-spacing:.28em;color:var(--terra);font-weight:700;margin-bottom:10px}
 /* 站名用明体（宋体）：横细竖粗、起笔带三角，接近京华老宋的气口。
@@ -514,6 +516,17 @@ body.has-mini{padding-bottom:66px}
   font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;line-height:1.65;
   color:var(--ink-soft);white-space:pre-wrap;word-break:break-all}
 .imp-log b{color:var(--terra);font-weight:600}
+/* 目录浏览器 */
+.imp-browse{flex:1;min-height:0;display:flex;flex-direction:column;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.ib-crumb{font-size:11px;color:var(--ink-faint);padding:7px 2px;border-bottom:1px dotted var(--line);word-break:break-all}
+.ib-list{flex:1;min-height:120px;max-height:38vh;overflow-y:auto;padding:4px 0;font-size:12.5px}
+.ib-list div.it{display:flex;gap:8px;align-items:baseline;padding:5px 6px;border-radius:6px;cursor:pointer}
+.ib-list div.it:hover{background:var(--paper-2)}
+.ib-list div.it .nm{font-family:var(--serif);font-weight:600}
+.ib-list div.it .hint{margin-left:auto;font-size:10px;color:var(--terra);white-space:nowrap}
+.ib-foot{display:flex;gap:10px;align-items:center;padding:7px 2px 9px;font-size:11px;color:var(--ink-faint)}
+.ib-foot button{border-radius:999px;padding:5px 14px;font-size:11.5px;cursor:pointer;border:1px solid var(--line);background:var(--paper-2);color:var(--ink)}
+.ib-tip{margin-left:auto}
 .imp-item .iw{font-size:10px;color:var(--terra);white-space:nowrap}
 .imp-item.warn .ia{color:var(--ink-faint)}
 </style>
@@ -671,6 +684,15 @@ body.has-mini{padding-bottom:66px}
     <div class="imp-list" id="impList"></div>
     <!-- 步骤日志：入库一旦卡住，这一块就是唯一的线索（远端看不到控制台） -->
     <pre class="imp-log" id="impLog" hidden></pre>
+    <!-- 目录浏览器：没有系统选目录框时的替代品，服务端列目录、点着往下走 -->
+    <div class="imp-browse" id="impBrowse" hidden>
+      <div class="ib-crumb" id="ibCrumb"></div>
+      <div class="ib-list" id="ibList"></div>
+      <div class="ib-foot">
+        <button type="button" id="ibUp">上一级</button>
+        <span class="ib-tip" id="ibTip">—</span>
+      </div>
+    </div>
     <div class="imp-act">
       <button type="button" id="impCancel">取消</button>
       <button type="button" class="go" id="impGo">写入</button>
@@ -776,6 +798,27 @@ const IDX=new Map(A.map((a,i)=>[a,i]));
 // 显示前统一兜一层，免得页面上出现这种一眼就不成立的值。
 const QUALITY_OK=/^\d{1,2}bit \/ [\d.]+kHz$/;
 A.forEach(al=>{if(al.quality&&!QUALITY_OK.test(al.quality))al.quality='未标注';});
+/* ===== 不同屏幕看到的大小要一样 =====
+   这张页面是按 1440px 宽、14px 正文设计的。换个屏幕，如果只靠响应式断点，
+   小屏上固定 14px 的字会比大屏看起来大一圈，卡片也会显得挤——用户看到的"比例不对"
+   就是这么来的（笔记本常见 1280~1366 的 CSS 宽度，台式 1920，都不等于 1440）。
+
+   解法：整页按 视口宽 / 1440 等比缩放。用 CSS zoom 而不是 transform：
+   zoom 会把 fixed 层的定位基准、字号、间距一起缩，且 100vh 仍旧是真实视口高度，
+   不需要给每个覆盖层单独补偿。窄屏（<900）不缩，交给原有的响应式断点，
+   免得手机上字小到看不清。 */
+const DESIGN_W=1440;
+function fitToViewport(){
+  const vw=Math.min(window.innerWidth||DESIGN_W,DESIGN_W*1.75);
+  const z=vw<900?1:Math.min(1.75,Math.max(0.78,vw/DESIGN_W));
+  document.documentElement.style.setProperty('--fit',String(z));
+  document.documentElement.style.zoom=z===1?'':String(z);
+}
+fitToViewport();
+let fitTimer=0;
+window.addEventListener('resize',()=>{clearTimeout(fitTimer);fitTimer=setTimeout(fitToViewport,120);});
+window.addEventListener('orientationchange',()=>setTimeout(fitToViewport,200));
+
 const $=id=>document.getElementById(id);
 const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const enc=s=>encodeURIComponent(s).replace(/'/g,'%27');
@@ -1991,7 +2034,13 @@ function impProgress(head,note,frac){
   impBar.firstElementChild.style.width=Math.max(2,Math.min(100,Math.round((frac||0)*100)))+'%';
   impMask.hidden=false;
 }
-function impHide(){impMask.hidden=true;impPlan=[];}
+function impHide(){
+  impMask.hidden=true;impPlan=[];
+  // 复位：下一次打开「专辑入库」是一张干净的屏，不带着上次的目录浏览器或空列表
+  impList.hidden=false;
+  const ib=document.getElementById('impBrowse'); if(ib)ib.hidden=true;
+  const c=document.getElementById('impCancel'); if(c){c.textContent='取消';c.onclick=impHide;}
+}
 $('impCancel').onclick=impHide;
 impMask.addEventListener('click',e=>{if(e.target===impMask)impHide();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!impMask.hidden)impHide();});
@@ -2106,6 +2155,160 @@ async function impStart(){
   }
   ilog('改用浏览器自己的选目录（file:// 模式）');
   return impPicker();
+}
+
+/* ===== 从别的文件夹导入（D 盘、下载目录、移动硬盘）=====
+   这是真正意义上的「选一个目录把里面的唱片搬进库」，跟「扫 无损/ 找新目录」是两件事。
+   页面没有系统选目录框可用（Chrome 157 那个回归），所以由服务端列目录，点着往下走。
+   认出来的东西分两种：一个 wav/ape + 一个 cue 的整轨碟（按 CUE 拆），
+   和一整目录 flac/wav 的普通专辑（直接复制）。判断交给 导入文件夹.py。 */
+let ibPath=null, ibData=null, ibPicked=null;
+
+async function ibOpen(dir){
+  impShow('从文件夹导入', dir?('正在看 '+dir):'选一个目录：里面可以是一张专辑，也可以是一批专辑的上级目录。',
+          [],'');
+  impList.hidden=true; $('impBrowse').hidden=false;
+  $('impGo').textContent='';$('impGo').disabled=true;
+  await ibGo(dir||null);
+}
+
+async function ibGo(dir){
+  const crumb=$('ibCrumb'), list=$('ibList'), tip=$('ibTip');
+  crumb.textContent='读取中…'; list.innerHTML='';
+  let r;
+  try{
+    const res=await fetch(API+'api/browse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dir})});
+    r=await res.json();
+    if(r.error)throw new Error(r.error);
+  }catch(e){
+    crumb.textContent='读不了：'+(e&&e.message?e.message:e);
+    return;
+  }
+  ibData=r; ibPath=r.dir||null; ibPicked=null;
+  if(!r.dir){                       // 还没选目录：列出盘符
+    crumb.textContent='这台电脑上的盘';
+    list.innerHTML=(r.places||[]).map(p=>'<div class="it" data-p="'+esc(p.path)+'"><span class="nm">'+esc(p.name)+'</span></div>').join('');
+    tip.textContent='点一个盘开始';
+    ibBind(list); return;
+  }
+  crumb.textContent=r.dir;
+  const items=[];
+  if(r.parent)items.push({p:r.parent,n:'..',up:true});
+  for(const d of r.dirs)items.push({p:d.path,n:d.name});
+  list.innerHTML=items.length?items.map(d=>'<div class="it" data-p="'+esc(d.p)+'">'+
+      '<span class="nm">'+esc(d.n)+'</span>'+(d.up?'<span class="hint">上一级</span>':'')+'</div>').join('')
+    :'<div class="it"><span class="nm" style="color:var(--ink-faint)">（这个目录里没有子目录）</span></div>';
+  // 永远可以"导入这一层"：这一层是专辑就导它，是一批专辑的上级目录就一批一起导。
+  // 到底认出了什么，由服务端 --probe 说了算，不由前端猜。
+  ibPicked=r.dir;
+  impGo.disabled=false; impGo.textContent='用这个目录';
+  impGo.onclick=()=>ibProbe(r.dir);
+  tip.textContent=(r.looksAlbum?(r.audio+' 个音频'+(r.cues?'，'+r.cues+' 个 cue':'')):'没有直接放音频')
+    + (r.dirs.length?'　·　'+r.dirs.length+' 个子目录':'');
+  ibBind(list);
+}
+
+function ibBind(list){
+  list.onclick=e=>{
+    const it=e.target.closest('.it'); if(!it||!it.dataset.p)return;
+    ibGo(it.dataset.p);
+  };
+}
+
+/* 让服务端认一认这个目录里有什么，再列出来给人确认 */
+async function ibProbe(dir){
+  impShow('正在分析…',dir,[],'');
+  impList.hidden=false; $('impBrowse').hidden=true;
+  impGo.disabled=true; impGo.textContent='分析中…';
+  let r;
+  try{
+    const res=await fetch(API+'api/import/probe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dir})});
+    r=await res.json();
+    if(r.error)throw new Error(r.error);
+    if(!r.ok)throw new Error(r.error||'没认出专辑');
+  }catch(e){
+    impShow('没认出专辑','这个目录里没有音频文件，或者结构太深（只认「专辑目录」和「装着专辑目录的上级目录」）。\n'+
+      (e&&e.message?e.message:e),[{"a:":"","b":""}],'');
+    impList.hidden=true;
+    impGo.disabled=false; impGo.textContent='重新选目录'; impGo.onclick=()=>ibOpen(null);
+    return;
+  }
+  ibData=r;
+  const albs=r.albums||[];
+  const items=[];
+  items.push({sec:'认出 '+albs.length+' 张（'+(r.parent&&albs.length>1?'这批是上级目录里的':'')+'先看清楚再导）'});
+  let whole=0, plain=0;
+  for(const a of albs){
+    const w=[];
+    if(a.kind==='whole-disc'){whole++;w.push('整轨，按 CUE 拆');}
+    else {plain++; if(!a.playable)w.push('有浏览器放不了的格式');}
+    if(!a.year)w.push('没年份');
+    if(!a.cover)w.push('无封面');
+    items.push({a:a.album||a.dirname, b:a.artist+' · '+a.tracks+' 曲'+(a.quality?' · '+a.quality:''),
+                w:w.join('、'), c:a.year||''});
+  }
+  impShow('认出 '+albs.length+' 张专辑',
+    '整轨碟（一个音频 + 一个 cue）会按 CUE 拆成单曲；一堆单独音轨的专辑直接复制进库。\n'+
+    '拆是逐轨转 FLAC，慢一些，几百 MB 的碟大约一两分钟；复制很快。\n'+
+    '目标一律落到 无损/<艺人>/<年份> <专辑> [位深-采样率]/，原目录不动。',
+    items, '导入这 '+albs.length+' 张');
+  impGo.disabled=false;
+  impGo.onclick=()=>ibCommit(dir);
+}
+
+async function ibCommit(dir){
+  impGo.disabled=true;impGo.textContent='导入中…';
+  impProgress('正在导入…','整轨碟在逐轨转 FLAC。这一步可能要几分钟，别关页面。',0);
+  ilog('从文件夹导入：'+dir);
+  let r;
+  try{
+    const res=await fetch(API+'api/import/folder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dir})});
+    r=await res.json();
+    if(r.error)throw new Error(r.error);
+    if(!r.ok)throw new Error(r.error||'导入失败');
+  }catch(e){
+    impShow('导入失败',(e&&e.message?e.message:e)+'\n已经放进库里的部分不会回滚，可以再点一次（已存在的目录会跳过）。',[],'');
+    impGo.disabled=false;impGo.textContent='重试';impGo.onclick=()=>ibCommit(dir);
+    return;
+  }
+  const items=r.items||[];
+  const ok=items.filter(x=>x.rel), skip=items.filter(x=>x.kind==='skip'), bad=items.filter(x=>x.kind==='fail');
+  const rels=ok.map(x=>x.rel);
+  ilog('已落盘 '+ok.length+' 张，其中跳过 '+skip.length+'，失败 '+bad.length);
+  // 落盘之后再走一次写 data.js（同一条已验证的路径）
+  if(!rels.length){
+    impShow('没有新东西可写',skip.length?'这些目录已经在库里了，跳过 ' + skip.length + ' 张。':'一张都没落盘。',
+      items.map(x=>({a:x.dirname,b:x.msg||'',w:x.kind==='skip'?'已存在':''})),
+      bad.length?'知道了':'知道了');
+    return;
+  }
+  impProgress('正在写 data.js…','把刚放好的 '+rels.length+' 张追加到库末尾。',0.8);
+  await fetch(API+'api/import/scan',{cache:'no-store'}).catch(()=>{});   // 让下一条扫描认得新目录
+  let c;
+  try{
+    const res=await fetch(API+'api/import/commit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rels})});
+    c=await res.json();
+    if(c.error)throw new Error(c.error);
+  }catch(e){
+    impShow('文件已放好，但写 data.js 失败',
+      '专辑文件已经落进 无损/ 了，只是没写进 data.js。\n报错：'+(e&&e.message?e.message:e)+'\n'+
+      '再点一次「专辑入库」→ 服务端扫描会看到这些新目录，直接写进去即可。',[],'');
+    return;
+  }
+  for(const al of (c.albums||[])){if(!IDX.has(al)){A.push(al);IDX.set(al,A.length-1);}}
+  D.albums=A;
+  if(c.update){
+    const i=(D.updates||[]).findIndex(x=>x.date===c.update.date);
+    if(i>=0)D.updates[i]=c.update;else (D.updates=D.updates||[]).push(c.update);
+  }
+  build();renderStats();renderTimeline();
+  impShow('导入完成：'+c.added+' 张 / '+c.tracks+' 曲',
+    'data.js 已备份为 '+c.backup+'，库里现在共 '+c.total+' 张。\n\n'+
+    '今天的足迹：\n「'+c.update.title+'」\n'+c.update.text+'\n\n'+
+    (bad.length?'有 '+bad.length+' 张没成功：\n'+bad.map(x=>'· '+x.dirname+'：'+x.msg).join('\n')+'\n\n':'')+
+    '想让新专辑有歌词和准确时长，在命令行跑：\n  python 补歌词.py --jobs 4\n  python 校准时长.py --fix',
+    items.filter(x=>x.kind!=='fail').slice(0,12).map(x=>({a:x.dirname,b:x.msg,w:x.kind==='skip'?'已存在':''})),
+    '知道了');
 }
 
 /* 走本机服务：扫描 → 预览 → 写入，三步都在服务端完成 */
@@ -2401,7 +2604,21 @@ async function impCommit(root){
     impShow('写入失败','写 data.js 时出错：'+(err&&err.message?err.message:err)+'\n如果刚才已经建了 .bak，可以用它覆盖回去。\n请把这段错误原样告诉我，别自己改 data.js。',[],'');
   }
 }
-$('importBtn').onclick=impStart;
+/* 入库按钮：先问一句「文件在哪」。
+   ① 已经在 无损/ 里、只是没登记（拆完整轨碟常见）→ 扫描 无损/
+   ② 还在 D 盘 / 下载目录 / 移动硬盘 → 从文件夹导入（服务端列目录、按 CUE 拆或复制） */
+$('importBtn').onclick=()=>{
+  impShow('专辑入库','要往库里加唱片，先选一个来源：',[
+    {sec:'① 文件已经在 无损/ 里了，只是还没登记（拆过整轨碟之后最常见）'},
+    {sec:'② 文件还在别处：D 盘、下载目录、移动硬盘，要搬进来'}
+  ],'');
+  impList.hidden=false; $('impBrowse').hidden=true;
+  impGo.disabled=false;
+  impGo.textContent='扫描 无损/';
+  impGo.onclick=()=>{impList.hidden=false;$('impBrowse').hidden=true;impGo.onclick=null;return impStart();};
+  impCancel.textContent='从文件夹导入…';
+  impCancel.onclick=()=>{impCancel.textContent='取消';impCancel.onclick=impHide;return ibOpen(null);};
+};
 build();
 
 </script>
