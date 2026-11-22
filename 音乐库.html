@@ -234,6 +234,17 @@ body.has-mini{padding-bottom:66px}
   .wall .card,.wall.leaving .card{animation:none}
 }
 /* 「换一批」：贴在封面区右边缘的一枚竖排书签。墙右边留了 64px 给它，互不遮挡。 */
+/* 数据加载失败时的重试钮：不要复用 .shuffle-main，
+   那是贴在墙右边的竖排书签（writing-mode:vertical-rl + 62x186 固定尺寸），
+   拿来当普通按钮会变成一条竖着的细长块。这里单独一个朴素样式。 */
+.retry-btn{margin-top:20px;padding:11px 26px;border-radius:999px;cursor:pointer;
+  border:1px solid color-mix(in srgb,var(--terra) 45%,transparent);
+  background:transparent;color:var(--terra);font-family:var(--serif);font-size:15px;
+  display:inline-flex;align-items:center;gap:10px;transition:background .25s,color .25s}
+.retry-btn:hover{background:var(--terra);color:var(--paper)}
+.retry-btn .sm-t{font-size:15px;letter-spacing:.06em}
+.retry-btn .sm-s{font-size:8px;letter-spacing:.24em;font-family:var(--sans);opacity:.62}
+
 .shuffle-main{position:fixed;left:auto;top:50%;transform:translateY(-50%);
   width:62px;height:186px;border-radius:20px;cursor:pointer;z-index:30;
   border:1px solid color-mix(in srgb,var(--terra) 32%,transparent);
@@ -386,7 +397,9 @@ body.has-mini{padding-bottom:66px}
 .pcol-h{flex:none;font-family:var(--serif);font-size:17px;color:var(--terra);margin:0 0 1.05em;font-weight:600;line-height:1.2}
 /* 正文占满剩余高度：内容多了在卡片里滚（滚轮即可，不画拖动条），
    少了也不硬撑——卡片本身是等高的，留白在下面。 */
-.pcol-t{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;font-size:15px;line-height:1.9;color:var(--ink-soft);white-space:pre-wrap}
+.pcol-t{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;font-size:15px;line-height:1.9;color:var(--ink-soft);white-space:pre-wrap;text-align:justify}
+.pcol-t p{margin:0 0 .75em;text-indent:2em;text-align:justify}
+.pcol-t p:last-child{margin-bottom:0}
 .pcol-t.muted{color:var(--ink-faint);font-style:italic;font-family:var(--serif)}
 /* 播放页不重复首页那句脚注：这一行字在首页已经有了，留在唱片页只是从歌词区抢走 30px */
 .pstage>.footer{display:none}
@@ -495,6 +508,12 @@ body.has-mini{padding-bottom:66px}
 .imp-bar i{display:block;height:100%;width:0;background:var(--terra);transition:width .25s ease}
 /* 清单里的分区标题（可写入 / 待拆分 / 已存在） */
 .imp-sec{font-family:var(--serif);font-size:11px;color:var(--terra);letter-spacing:.08em;padding:12px 2px 5px;border-bottom:1px solid var(--line)}
+/* 步骤日志：远端（手机/平板）出问题时看不到控制台，所有关键步骤都记在这，出错时随错误一起显示 */
+.imp-log{max-height:150px;overflow:auto;margin:10px 0 0;padding:8px 10px;border-radius:8px;
+  background:var(--paper-2);border:1px solid var(--line);
+  font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;line-height:1.65;
+  color:var(--ink-soft);white-space:pre-wrap;word-break:break-all}
+.imp-log b{color:var(--terra);font-weight:600}
 .imp-item .iw{font-size:10px;color:var(--terra);white-space:nowrap}
 .imp-item.warn .ia{color:var(--ink-faint)}
 </style>
@@ -650,6 +669,8 @@ body.has-mini{padding-bottom:66px}
     <p class="imp-note" id="impNote">—</p>
     <div class="imp-bar" id="impBar" hidden><i></i></div>
     <div class="imp-list" id="impList"></div>
+    <!-- 步骤日志：入库一旦卡住，这一块就是唯一的线索（远端看不到控制台） -->
+    <pre class="imp-log" id="impLog" hidden></pre>
     <div class="imp-act">
       <button type="button" id="impCancel">取消</button>
       <button type="button" class="go" id="impGo">写入</button>
@@ -668,17 +689,80 @@ body.has-mini{padding-bottom:66px}
   <button class="sm" id="miniNext" title="下一首"></button>
   <button class="sm" id="miniOpen" title="打开唱片页"></button>
 </div>
-<script src="data.js"></script>
+<script src="data.js" onerror="window.__dataErr=1"></script>
 <!-- durations.js 由「校准时长.py」生成：部分 FLAC 的头部时长写成了整张专辑长度，
      播放器用这里的真实值当进度条上限，才不会一拖就撞到文件末尾被判成播放结束。
      没有这个文件也能正常用，只是那几首曲目的时长会按文件头显示。 -->
-<script src="durations.js"></script>
+<script src="durations.js" onerror="window.__durErr=1"></script>
 <script>
 const D=window.LIB_DATA||{albums:[],updates:[]};
 const DUR=window.LIB_DUR||{};   // "艺人/专辑/曲目.flac" -> 真实秒数
 const OFF=window.LIB_OFF||{};   // "艺人/专辑/曲目.flac" -> 这首曲目第一帧在专辑时间轴上的起点（秒）
 const BAD=new Set(window.LIB_BAD||[]);   // 磁盘上已经损坏、几乎播不出来的文件
 const A=D.albums;
+/* data.js 没加载成功时 A 是空的：页面会正常画出来，但墙上什么都没有、搜索也搜不到，
+   看起来像"打不开"，其实只是那 13.9MB 没下来。手机上首次打开最容易碰到
+   （弱网 + 大文件，断了之后 <script> 是静默失败的）。
+
+   与其让人对着空墙发呆，不如自己重新拉一遍：data.js 里只有 window.LIB_DATA
+   一个赋值语句，同源取回来直接 eval 是安全的（内容是我们自己生成的）。
+   sessionStorage 记一次重启次数，避免「重试成功→reload→又失败」无限转圈。 */
+const DATA_MISSING=!A.length;
+
+async function reloadData(url,globalName){
+  const r=await fetch(url,{cache:'no-cache'});
+  if(!r.ok)throw new Error(url+' HTTP '+r.status);
+  const txt=await r.text();
+  if(!/^\s*window\.LIB/.test(txt))throw new Error(url+' 内容不完整');
+  (0,eval)(txt);
+  if(!window[globalName])throw new Error(url+' 未生效');
+  return true;
+}
+if(DATA_MISSING){
+  (async()=>{
+    const m=document.getElementById('main');
+    let tries=0;
+    try{tries=parseInt(sessionStorage.getItem('sirius-data-retry')||'0',10)||0;}catch(e){}
+    if(tries>=3){
+      if(m)m.innerHTML='<div class="empty" style="line-height:2">'+
+        '<b>专辑数据没能加载</b><br>data.js（约 13.9MB）已经自动重试多次仍未成功。<br>'+
+        '多半是网络太慢或服务器没开。连上再点重试即可。<br>'+
+        '<button class="retry-btn" '+
+        'onclick="sessionStorage.removeItem(\'sirius-data-retry\');location.reload()">'+
+        '<span class="sm-t">再试一次</span><span class="sm-s">RETRY</span></button></div>';
+      return;
+    }
+    for(let i=1;i<=2;i++){
+      try{
+        try{sessionStorage.setItem('sirius-data-retry',String(tries+1));}catch(e){}
+        if(m)m.innerHTML='<div class="empty">正在重新载入专辑数据…（第 '+i+' 次）</div>';
+        await reloadData('data.js','LIB_DATA');
+        try{await reloadData('durations.js','LIB_DUR');}catch(e){}
+        try{sessionStorage.removeItem('sirius-data-retry');}catch(e){}
+        location.reload();return;                  // 数据齐了，整页重来一次最干净
+      }catch(e){
+        if(i===2&&m){
+          m.innerHTML='<div class="empty" style="line-height:2">'+
+            '<b>专辑数据没能加载</b><br>data.js（约 13.9MB）下载失败。<br>'+
+            '<span style="font-size:12px;opacity:.7">'+(e&&e.message?e.message:e)+'</span><br>'+
+            '<button class="retry-btn" '+
+            'onclick="location.reload()"><span class="sm-t">再试一次</span><span class="sm-s">RETRY</span></button>'+
+            '</div>';
+        }
+        await new Promise(s=>setTimeout(s,800));
+      }
+    }
+  })();
+}
+// 页面里任何脚本错误都在顶部露一行，别让它在控制台里默默躺着
+window.addEventListener('error',e=>{
+  if(window.__errShown)return;window.__errShown=1;
+  const bar=document.createElement('div');
+  bar.style.cssText='position:fixed;left:0;right:0;top:0;z-index:9999;padding:8px 14px;font:13px/1.6 system-ui;background:#8c2f22;color:#fff';
+  bar.textContent='页面脚本出错：'+(e.message||e.type)+' —— 截图发给维护者可以定位';
+  document.body.appendChild(bar);
+},true);
+
 // 专辑 -> 下标：每张卡都靠它反查，上千张也秒开
 const IDX=new Map(A.map((a,i)=>[a,i]));
 // 数据兜底：有 1 张专辑的音质是从文件夹名的年份区间误解析出来的
@@ -1235,16 +1319,34 @@ function fillAlbumInfo(al){
   const ai=(al.artistInfo||'').trim(), intro=(al.intro||'').trim();
   const left=ai||intro, right=intro||ai;
   const setCol=(el,text,empty)=>{
-    el.textContent=text||empty;
+    if(text){
+      // 先按原文换行分段；单段过长时再按句末标点切成每 2-3 句一段，避免整段看着累
+      const paragraphs=[];
+      text.split(/\n+/).forEach(block=>{
+        block=block.trim();
+        if(!block)return;
+        if(block.length<=110){paragraphs.push(block);return;}
+        const sents=block.match(/[^。！？!?；;]+[。！？!?；;]?/g)||[block];
+        let cur='';
+        sents.forEach(s=>{
+          if(cur&&cur.length+s.length>110){paragraphs.push(cur.trim());cur='';}
+          cur+=s;
+        });
+        if(cur.trim())paragraphs.push(cur.trim());
+      });
+      el.replaceChildren(...paragraphs.map(s=>{const p=document.createElement('p');p.textContent=s;return p;}));
+    }else{
+      el.textContent=empty;
+    }
     el.classList.toggle('muted',!text);
   };
   setCol($('pArtistInfo'),left,'这张唱片没有留下艺人资料。');
   // intro 以 artistInfo 开头（很常见）：右栏只贴"多出来的那截专辑笔记"，不为同一段话再说一遍
   if(intro&&ai&&intro.startsWith(ai)){
     const tail=intro.slice(ai.length).replace(/^[\s，。、;；:：\-—]+/,'').trim();
-    setCol($('pAlbumInfo'),tail,'这张唱片没有额外的专辑笔记，艺人资料见左侧。');
-  }else if(right&&left&&right===left)setCol($('pAlbumInfo'),'这张唱片的笔记与左侧艺人资料相同，内容见左边。','');
-  else setCol($('pAlbumInfo'),right,'这张唱片没有留下专辑笔记。');
+    setCol($('pAlbumInfo'),tail,'暂时没有专辑笔记。');
+  }else if(right&&left&&right===left)setCol($('pAlbumInfo'),'暂时没有专辑笔记。','');
+  else setCol($('pAlbumInfo'),right,'暂时没有专辑笔记。');
 }
 /* 返回首页：先播退场动画再卸载，避免"啪一下就没了"。
    动画结束用 animationend 收尾，另留 380ms 兜底（万一动画被系统关掉）。 */
@@ -1820,46 +1922,8 @@ function impParse(dirname){
   return {year,quality,album:album||dirname,disc};
 }
 const impDirs=async dir=>{const out=[];for await(const h of dir.values()){if(h.kind==='directory'&&!IMP_SKIP.has(h.name))out.push(h);}return out;};
-// 扫描：无损/<艺人>/<专辑>/…（CD1 之类子目录也认，最多再下两层）
-async function impScan(root){
-  let base=root;
-  try{base=await root.getDirectoryHandle('无损');}catch(e){}
-  const hits=[];
-  for(const artistDir of await impDirs(base)){
-    for(const albumDir of await impDirs(artistDir)){
-      const files=[];
-      const walk=async(dir,depth,prefix)=>{
-        for await(const h of dir.values()){
-          if(h.kind==='file'){if(IMP_AUDIO.test(h.name))files.push({name:h.name,path:prefix+h.name,handle:h});}
-          else if(depth<2&&!IMP_SKIP.has(h.name))await walk(h,depth+1,prefix+h.name+'/');
-        }
-      };
-      await walk(albumDir,0,'');
-      if(files.length)hits.push({artist:artistDir.name,dirname:albumDir.name,dir:albumDir,files});
-    }
-  }
-  return hits;
-}
-async function impAlbum(entry){
-  const mi=impParse(entry.dirname);
-  const files=entry.files.slice().sort((x,y)=>x.name.localeCompare(y.name,'en',{numeric:true}));
-  let cover='';
-  try{for await(const h of entry.dir.values()){if(h.kind==='file'&&IMP_COVER.test(h.name)){cover=h.name;break;}}}catch(e){}
-  if(!mi.quality){
-    for(const f of files){
-      const info=await impFlacInfo(await f.handle.getFile());
-      if(info){mi.quality=info.bps+'bit / '+impKHz(info.sr);break;}
-    }
-  }
-  return {
-    artist:entry.artist,album:mi.album,year:mi.year,quality:mi.quality||'未标注',
-    disc:mi.disc,era:impEra(mi.year),genre:'其他',
-    cover:cover,intro:'',artistInfo:'',
-    rel:'无损/'+entry.artist+'/'+entry.dirname,
-    tracks:files.map(f=>({n:f.name.replace(IMP_AUDIO,'').replace(/^\s*\d{1,3}\s*[-._]\s*/,''),p:f.path})),
-    coverFile:''
-  };
-}
+// 扫描与读专辑信息的实现在下面（带 onProgress 那一对）。
+// 这里原来还有一份不带进度的旧实现，两套同名函数并存只会让后来改错地方，已删除。
 // 足迹规则（与 库维护须知.md 一致）：同一天只留一条，标题 ≤14 字，正文用「；」接在后面
 function addUpdate(date,title,text){
   D.updates=D.updates||[];
@@ -1871,8 +1935,37 @@ function addUpdate(date,title,text){
     day.text=(day.text||'').replace(/[。；;\s]+$/,'')+'；'+text;
   }else D.updates.push({date,title:t,text:text});
 }
-const impMask=$('impMask'),impList=$('impList'),impNote=$('impNote'),impGo=$('impGo'),impHead=$('impHead'),impBar=$('impBar');
+const impMask=$('impMask'),impList=$('impList'),impNote=$('impNote'),impGo=$('impGo'),impHead=$('impHead'),impBar=$('impBar'),impLog=$('impLog');
 let impPlan=[];
+/* 入库的步骤日志。远端（手机/平板、外网点开）出问题时看不到浏览器控制台，
+   所以每一步都写进这个 <pre>，出错时它跟着错误提示一起留在屏幕上。
+   ilog('…') 正常步骤；它只保留最近 40 行，避免刷屏。 */
+let impLogLines=[];
+function ilog(s){
+  const d=new Date(), p=v=>String(v).padStart(2,'0');
+  const t=p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+  impLogLines.push(t+'  '+s);
+  if(impLogLines.length>40)impLogLines=impLogLines.slice(-40);
+  if(impLog){
+    impLog.hidden=false;
+    impLog.textContent=impLogLines.join('\n');
+    impLog.scrollTop=impLog.scrollHeight;
+  }
+}
+function ilogReset(){impLogLines=[];if(impLog){impLog.hidden=true;impLog.textContent='';}}
+
+/* 一个能等的 Promise：有些浏览器的 showDirectoryPicker 在窗口失焦、
+   或者上一次选择还没结束时既不 resolve 也不 reject，界面就永远停在
+   “正在选择目录”。超过 90 秒就当作没选，给出能操作的提示，
+   而不是让人对着一个不动的按钮猜。 */
+function withTimeout(p,ms,label){
+  return new Promise((resolve,reject)=>{
+    let done=false;
+    const t=setTimeout(()=>{if(!done){done=true;reject(Object.assign(new Error(label+'超时'),{name:'TimeoutError'}));}},ms);
+    p.then(v=>{if(!done){done=true;clearTimeout(t);resolve(v);}},
+           e=>{if(!done){done=true;clearTimeout(t);reject(e);}});
+  });
+}
 /* 这一个弹层要当三种屏用：进度 / 预览 / 结果。
    设计上只有一条硬规矩——任何路径都不许"什么都没发生"：
    取消之外的所有结局，都要有一个能读的标题和一句能照着做的下一步。 */
@@ -1912,14 +2005,18 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!impMask.hidden)imp
 const IMP_CUE_T=/\.cue$/i;
 const impIsCue=h=>h.cues.length>0&&h.files.length<=1;
 
-async function impScan(root,onProgress){
+async function impScan(root,onProgress,isKnown){
   let base=root;
   try{base=await root.getDirectoryHandle('无损');}catch(e){}
   const artists=await impDirs(base);
   const hits=[];
-  let done=0;
+  let done=0,known=0;
   for(const artistDir of artists){
     for(const albumDir of await impDirs(artistDir)){
+      // 库里已有的专辑不必再进去数文件：一个专辑几十个 flac，
+      // 991 个专辑全数一遍要读两万多个目录项，正是"点了没反应"的主要原因。
+      // 目录名就能判定是不是新的，命中就跳过。
+      if(isKnown&&isKnown(artistDir.name,albumDir.name)){known++;continue;}
       const files=[],cues=[];
       const walk=async(dir,depth,prefix)=>{
         for await(const h of dir.values()){
@@ -1933,10 +2030,10 @@ async function impScan(root,onProgress){
       if(files.length)hits.push({artist:artistDir.name,dirname:albumDir.name,dir:albumDir,files,cues});
     }
     done++;
-    if(onProgress)onProgress(done,artists.length,hits.length,artistDir.name);
+    if(onProgress)onProgress(done,artists.length,hits.length,artistDir.name,known);
     await new Promise(r=>setTimeout(r,0));   // 让出一帧，进度条才画得出来
   }
-  return hits;
+  return {hits,known,artistCount:artists.length};
 }
 async function impAlbum(entry){
   const mi=impParse(entry.dirname);
@@ -1972,47 +2069,95 @@ function addUpdate(date,title,text){
 
 async function impStart(){
   const btn=$('importBtn');
+  ilogReset();
   if(!window.showDirectoryPicker){
     impShow('这个浏览器做不到','当前浏览器不支持直接写库。\n用 Chrome 或 Edge 打开本页再试，其余功能不受影响。',[],'');
     return;
   }
+  // 点下去就先给反馈：选目录的对话框在另一层，页面自己不会有任何变化，
+  // 不给字会让人以为按钮没响应，于是又点一次（第二次多半被浏览器挡掉）。
+  btn.disabled=true;btn.textContent='选择目录…';
+  impProgress('请选择音乐库文件夹','浏览器会让你选一个文件夹：请选「音乐库」这一层——里面能直接看到 data.js 和 无损。\n选完还要点一下浏览器的「允许编辑」/「查看文件」，之后才会开始扫描。',0);
+  ilog('点击「专辑入库」');
+  ilog('调用 showDirectoryPicker…');
   let root;
-  try{root=await window.showDirectoryPicker({mode:'readwrite',id:'sirius-musiclib'});}
+  try{
+    root=await withTimeout(window.showDirectoryPicker({mode:'readwrite',id:'sirius-musiclib'}),90000,'选择目录');
+    ilog('已选：'+root.name);
+  }
   catch(e){
-    if(e&&e.name==='AbortError')return;      // 自己按了取消，不打扰
-    impShow('目录没打开','浏览器返回：'+(e&&e.message?e.message:e)+'\n可能是页面不在最前面，或上一次的目录选择还没结束。\n再点一次「专辑入库」即可。',[],'');
+    const nm=e&&e.name?e.name:'';
+    ilog('选择目录失败：'+nm+' '+(e&&e.message?e.message:''));
+    btn.disabled=false;btn.textContent='＋ 专辑入库';
+    if(nm==='AbortError'){
+      // 用户自己按了取消：不弹窗打扰，但按钮要恢复，并且留一句“已取消”的状态。
+      impShow('已取消','没有选择目录，data.js 没有改动。\n想入库时再点一次「专辑入库」。',[],'');
+      return;
+    }
+    if(nm==='TimeoutError'){
+      impShow('选择目录没有回应','等了两分钟，浏览器一直没把目录交回来。常见原因：\n'+
+        '· 选目录的窗口被别的窗口挡住了，没注意到\n'+
+        '· 上一次的目录选择还开着，这次的点按被忽略\n'+
+        '先看一下是不是还有目录窗口开着，关掉它，再点一次「专辑入库」。',[],'');
+      return;
+    }
+    if(nm==='SecurityError'||nm==='NotAllowedError'){
+      impShow('浏览器拦住了','这个页面拿不到目录访问权。\n'+
+        '· 请从 Chrome 或 Edge 正常打开本页（不要放在 iframe 里，也不要用其它内嵌浏览器）\n'+
+        '· 用 127.0.0.1 / localhost / 或 https 地址打开，纯 http 的局域网 IP 会被当成不安全来源\n'+
+        '浏览器返回：'+(e&&e.message?e.message:e),[],'');
+      return;
+    }
+    impShow('目录没打开','浏览器返回：'+nm+' '+(e&&e.message?e.message:e)+'\n'+
+      '可能是页面不在最前面，或上一次的目录选择还没结束。\n再点一次「专辑入库」即可。',[],'');
     return;
   }
+  impProgress('正在确认写入权限…','如果浏览器弹出「要允许此网站编辑文件吗？」，请选「允许编辑」。',0.02);
   try{
     let st=await root.queryPermission({mode:'readwrite'});
     if(st!=='granted')st=await root.requestPermission({mode:'readwrite'});
+    ilog('写入权限：'+st);
     if(st!=='granted'){
-      impShow('没有写入权限','浏览器没有给这个目录写权限，data.js 改不了。\n重新点一次「专辑入库」，在浏览器的提示里选「允许编辑」。',[],'');
+      btn.disabled=false;btn.textContent='＋ 专辑入库';
+      impShow('没有写入权限','浏览器没有给这个目录写权限，data.js 改不了。\n'+
+        '重新点一次「专辑入库」，在浏览器的提示里选「允许编辑」。',[],'');
       return;
     }
-  }catch(e){/* 老浏览器可能没有这两个方法，下面真写的时候会再报 */}
+  }catch(e){ilog('权限查询跳过：'+(e&&e.message?e.message:e));/* 老浏览器可能没有这两个方法，下面真写的时候会再报 */}
   // 选错目录是最容易踩的坑：让人选「无损」而不是库根目录，扫描能过、写 data.js 时才炸。
   // 这里先探一下 data.js 在不在，不在就把该选哪一层说清楚。
   try{await root.getFileHandle('data.js');}
   catch(e){
+    btn.disabled=false;btn.textContent='＋ 专辑入库';
+    ilog('这个目录里没有 data.js');
     impShow('目录选错了','请选「音乐库」这一层（里面能直接看到 data.js 和 无损 文件夹），\n不要选里面的「无损」，也不要选某一张专辑的文件夹。\n选对了再点一次「专辑入库」。',[],'');
     return;
   }
-  btn.disabled=true;btn.textContent='扫描中…';
-  impProgress('正在扫描…','读 无损/ 下的艺人文件夹。库有四百多位艺人，第一次会走几十秒，进度条在动就说明在干活。',0);
+  ilog('目录校验通过（能看见 data.js）');
+  btn.textContent='扫描中…';
+  impProgress('正在扫描…','列 无损/ 下的艺人文件夹。库里已有的专辑按目录名直接跳过，只仔细读新目录。',0);
   try{
-    const hits=await impScan(root,(done,total,found,name)=>
-      impProgress('正在扫描… '+done+'/'+total,'当前：'+name+'\n已发现 '+found+' 个有音频的专辑文件夹。',total?done/total:0));
+    // 已知专辑的「艺人/目录名」，用来在扫描时直接跳过——不必进目录数文件。
+    const knownRel=new Set(A.map(a=>String(a.rel||'').replace(/\\/g,'/').replace(/^无损\//,'').toLowerCase()));
+    const isKnown=(artist,dirname)=>knownRel.has((artist+'/'+dirname).toLowerCase());
+    const scan=await impScan(root,(done,total,found,name,skipped)=>{
+      impProgress('正在扫描… '+done+'/'+total,
+        '当前：'+name+'\n已发现 '+found+' 个新目录，跳过 '+skipped+' 个已有专辑。',total?done/total:0);
+      if(done%25===0||done===total)ilog('扫描 '+done+'/'+total+'，新 '+found+'，跳过 '+skipped);
+    },isKnown);
+    const hits=scan.hits;
+    ilog('扫描完成：新目录 '+hits.length+' 个（跳过已有 '+scan.known+' 个）');
     const seen=new Set(A.map(a=>a.rel.replace(/\\/g,'/').toLowerCase()));
     const seenName=new Set(A.map(a=>a.artist.toLowerCase()+'|'+String(a.album||'').toLowerCase()));
     const fresh=hits.filter(h=>!seen.has(('无损/'+h.artist+'/'+h.dirname).toLowerCase()));
     if(!fresh.length){
       btn.disabled=false;btn.textContent='＋ 专辑入库';
-      impShow('没有新专辑','扫到 '+hits.length+' 张专辑，库里都已经有了。\ndata.js 没有改动。',[],'');
+      impShow('没有新专辑','一共 '+scan.artistCount+' 位艺人、'+scan.known+' 张已有专辑已跳过，没有发现新的专辑文件夹。\ndata.js 没有改动。',[],'');
       return;
     }
     const cueOnes=fresh.filter(impIsCue);
     const plain=fresh.filter(h=>!impIsCue(h));
+    ilog('待读信息：'+plain.length+' 张，待拆分：'+cueOnes.length+' 张');
     const albums=[],same=[];
     for(let k=0;k<plain.length;k++){
       if(k%4===0)impProgress('正在读专辑信息… '+(k+1)+'/'+plain.length,'已经排好 '+albums.length+' 张，跳过 '+same.length+' 张。',plain.length?(k+1)/plain.length:1);
@@ -2021,6 +2166,7 @@ async function impStart(){
       if(seenName.has(key)){same.push(al);continue;}
       seenName.add(key);albums.push(al);
     }
+    ilog('读信息完成：可写 '+albums.length+' 张，同名跳过 '+same.length+' 张');
     impPlan=albums;
     const items=[];
     if(albums.length){
@@ -2058,13 +2204,22 @@ async function impStart(){
     btn.disabled=false;btn.textContent='＋ 专辑入库';
   }catch(err){
     btn.disabled=false;btn.textContent='＋ 专辑入库';
+    ilog('扫描失败：'+(err&&err.name?err.name+' ':'')+(err&&err.message?err.message:err));
     impShow('扫描失败','读目录时出错：'+(err&&err.message?err.message:err)+'\n先确认这个磁盘还连着、目录没被别的程序占着，然后再点一次。',[],'');
   }
 }
+/* 按 UTF-8 实际字节算大小：中文一个字在磁盘上占 3 字节，
+   直接用字符串长度会报小一半多，写在日志里容易让人以为 data.js 缩水了。 */
+function impBytes(s){
+  try{return new Blob([s]).size;}catch(e){return s.length;}
+}
+const impMB=s=>(impBytes(s)/1048576).toFixed(2)+' MB';
+
 async function impCommit(root){
   const n=impPlan.length;
   const trk=impPlan.reduce((k,a)=>k+a.tracks.length,0);
   impGo.disabled=true;impGo.textContent='写入中…';
+  ilog('开始写入：'+n+' 张 / '+trk+' 曲');
   try{
     const now=new Date();
     const p2=v=>String(v).padStart(2,'0');
@@ -2072,9 +2227,11 @@ async function impCommit(root){
     const day=now.getFullYear()+'-'+p2(now.getMonth()+1)+'-'+p2(now.getDate());
     const fh=await root.getFileHandle('data.js');
     const oldText=await (await fh.getFile()).text();
+    ilog('读到原 data.js：'+impMB(oldText));
     // 1) 备份原件：写坏一次还能原样捞回来
     const bak=await root.getFileHandle('data.js.bak-'+stamp,{create:true});
     const bw=await bak.createWritable();await bw.write(oldText);await bw.close();
+    ilog('已备份：data.js.bak-'+stamp);
     // 2) 追加新专辑：只能 push 到末尾
     for(const al of impPlan){A.push(al);IDX.set(al,A.length-1);}
     D.albums=A;D.generated=day;
@@ -2085,7 +2242,9 @@ async function impCommit(root){
       impPlan.map(a=>a.artist+'《'+a.album+'》').slice(0,4).join('、')+(n>4?' 等':''));
     // 3) 整份重写 data.js：格式与原文件一致，中文不转义
     const text='window.LIB_DATA='+JSON.stringify(D)+';';
+    ilog('写回 data.js：'+impMB(text));
     const w=await fh.createWritable();await w.write(text);await w.close();
+    ilog('data.js 已写入');
     // 4) 页面就地刷新：数字、足迹、封面墙都要跟着变
     build();renderStats();renderTimeline();
     impPlan=[];
@@ -2098,6 +2257,7 @@ async function impCommit(root){
       '\n「'+(u?u.title:'')+'」'+(beforeText?'…；':'')+added+
       '\n\n想让这几张也有歌词和准确时长，回到命令行跑一次：\n  python 补歌词.py --jobs 4\n  python 校准时长.py --fix\n路径全是相对的，这张盘换到别的电脑，插上双击本页就能用。',[],'');
   }catch(err){
+    ilog('写入失败：'+(err&&err.name?err.name+' ':'')+(err&&err.message?err.message:err));
     impShow('写入失败','写 data.js 时出错：'+(err&&err.message?err.message:err)+'\n如果刚才已经建了 .bak，可以用它覆盖回去。\n请把这段错误原样告诉我，别自己改 data.js。',[],'');
   }
 }
