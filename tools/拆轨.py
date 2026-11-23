@@ -27,7 +27,7 @@ r"""按 CUE 把整轨音频拆成单曲，放进 无损/<艺人>/<专辑>/。
 import argparse, io, json, os, re, shutil, subprocess, sys, tempfile
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-ROOT = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LIB = os.path.join(ROOT, '无损')
 RAW = os.path.join(ROOT, '_原盘')
 AUDIO_EXT = {'.wav', '.ape', '.flac', '.wv', '.tta', '.aiff', '.m4a', '.mp3', '.dff', '.dsf'}

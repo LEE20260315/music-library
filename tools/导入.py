@@ -12,15 +12,13 @@ r"""从任意文件夹入库：整轨碟按 CUE 拆，多文件专辑直接复�
     无损/<艺人>/<目录名>/ 下并把 rel 报出来。
   · 复制用 copy2 保留时间戳；源目录默认不动（用户自己决定删）。
 """
-import argparse, json, os, re, shutil, subprocess, sys, importlib.util
+import argparse, json, os, re, shutil, subprocess, sys
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-ROOT = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LIB = os.path.join(ROOT, '无损')
 
-_spec = importlib.util.spec_from_file_location('cq', os.path.join(ROOT, '拆分CUE.py'))
-cq = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(cq)          # 复用 read_text / parse_cue / probe / safe / fmt_khz
+from tools import 拆轨 as cq          # 复用 read_text / parse_cue / probe / safe / fmt_khz
 
 AUDIO_EXT = cq.AUDIO_EXT
 PLAYABLE = {'.flac', '.wav', '.m4a', '.mp3', '.aac', '.ogg', '.opus'}

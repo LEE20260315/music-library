@@ -20,7 +20,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent.parent
 TARGET = HERE / "音乐库.html"
 LYRIC_DIR = HERE / "_lyrics"
 

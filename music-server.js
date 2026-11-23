@@ -231,8 +231,26 @@ function era(y) {
   return Math.floor(n / 10) * 10 + '年代';
 }
 
+function normalizeImportName(value) {
+  return String(value || '').normalize('NFKC').toLowerCase().replace(/[\s()\[\]{}·、,，。\-_'`\"《》「」]/g, '');
+}
+
+function buildDuplicateIndex(albums) {
+  const index = new Map();
+  for (const a of albums) {
+    const key = normalizeImportName(a.artist) + '\u0000' + normalizeImportName(a.album);
+    if (key !== '\u0000' && !index.has(key)) index.set(key, { rel: a.rel, artist: a.artist, album: a.album, year: a.year || '', tracks: (a.tracks || []).length });
+  }
+  return index;
+}
+
+function findDuplicate(index, artist, album) {
+  return index.get(normalizeImportName(artist) + '\u0000' + normalizeImportName(album)) || null;
+}
+
 function scanLibrary() {
   const { data } = readData();
+  const duplicateIndex = buildDuplicateIndex(data.albums);
   const known = new Set(data.albums.map(a => String(a.rel || '').replace(/\\/g, '/').toLowerCase()));
   const artists = listDirs(LIB);
   const fresh = [], pending = [], unplayable = [];
@@ -253,7 +271,8 @@ function scanLibrary() {
       }
       const item = {
         artist, dirname, rel, count: out.audio.length, cue: out.cues[0] || '', cover: out.cover,
-        album: mi.album, year: mi.year, quality: quality || '', disc: mi.disc
+        album: mi.album, year: mi.year, quality: quality || '', disc: mi.disc,
+        dup: findDuplicate(duplicateIndex, artist, mi.album)
       };
       // 整轨 + CUE：一个音频里装着整张碟，硬写进去会变成 1 首
       item.playable = out.audio.every(a => IMP_PLAY_RE.test(a.name));
@@ -307,14 +326,20 @@ function addUpdate(data, date, title, text) {
 function commitImport(rels) {
   const { data } = readData();
   const have = new Set(data.albums.map(a => String(a.rel || '').replace(/\\/g, '/').toLowerCase()));
-  const picked = [];
-  for (const rel of rels) {
-    const key = String(rel).replace(/\\/g, '/').toLowerCase();
+  const duplicateIndex = buildDuplicateIndex(data.albums);
+  const picked = [], skippedDup = [];
+  for (const request of rels) {
+    const rel = typeof request === 'string' ? request : String(request && request.rel || '');
+    const force = !!(request && typeof request === 'object' && request.force === true);
+    const key = rel.replace(/\\/g, '/').toLowerCase();
     if (have.has(key)) continue;                        // 已经有了，绝不重复追加
-    if (!fs.existsSync(path.join(ROOT, rel))) continue;
-    picked.push(buildEntry(rel));
+    if (!rel || !fs.existsSync(path.join(ROOT, rel))) continue;
+    const entry = buildEntry(rel);
+    const dup = findDuplicate(duplicateIndex, entry.artist, entry.album);
+    if (dup && !force) { skippedDup.push({ rel, dup }); continue; }
+    picked.push(entry);
   }
-  if (!picked.length) throw new Error('没有可写入的专辑（都已在库里或目录已消失）');
+  if (!picked.length) return { added: 0, tracks: 0, skippedDup, total: data.albums.length, albums: [] };
   const now = new Date(), p2 = v => String(v).padStart(2, '0');
   const stamp = now.getFullYear() + p2(now.getMonth() + 1) + p2(now.getDate()) + '-' + p2(now.getHours()) + p2(now.getMinutes());
   const day = now.getFullYear() + '-' + p2(now.getMonth() + 1) + '-' + p2(now.getDate());
@@ -334,7 +359,7 @@ function commitImport(rels) {
   fs.writeFileSync(path.join(ROOT, 'data.js'), txt, 'utf8');
   const u = data.updates.find(x => x.date === day);
   // 把写入的条目原样回给页面：页面据此就地更新，不必整页重载
-  return { added: picked.length, tracks: trk, backup: path.basename(bak), total: data.albums.length, update: u, albums: picked };
+  return { added: picked.length, tracks: trk, backup: path.basename(bak), total: data.albums.length, update: u, albums: picked, skippedDup };
 }
 
 /* 从 file:// 双击打开的页面也会来调这些接口，那是个不透明来源（Origin: null）。
@@ -402,12 +427,12 @@ function readBody(req, res, cb) {
   req.on('end', () => cb(body));
 }
 
-/* 调 导入文件夹.py：拆碟要跑几分钟，所以不设短超时；
+/* 调 python 音乐库.py 导入：拆碟要跑几分钟，所以不设短超时；
    标准输出是一行 JSON，解析失败时把 stderr 原样还给页面，别让人对着空结果猜。 */
 function runPy(args, done) {
   const { spawn } = require('child_process');
   const py = process.platform === 'win32' ? 'python' : 'python3';
-  const child = spawn(py, [path.join(ROOT, '导入文件夹.py')].concat(args), {
+  const child = spawn(py, [path.join(ROOT, '音乐库.py'), '导入'].concat(args), {
     cwd: ROOT,
     env: Object.assign({}, process.env, { PYTHONIOENCODING: 'utf-8' })
   });
@@ -425,6 +450,14 @@ function runPy(args, done) {
     }
     done({ code, json: json || null, err: (err || out).slice(-1500) });
   });
+}
+
+function annotateProbe(result) {
+  if (!result || !Array.isArray(result.albums)) return result;
+  const { data } = readData();
+  const index = buildDuplicateIndex(data.albums);
+  for (const a of result.albums) a.dup = findDuplicate(index, a.artist, a.album);
+  return result;
 }
 
 function handleApi(req, res, pathname) {
@@ -473,8 +506,8 @@ function handleApi(req, res, pathname) {
 
   /* ---- 从别处（D 盘、下载目录、移动硬盘）导入整个文件夹 ----
      这是「选一个目录把里面的专辑搬进库」，跟上面扫 无损/ 是两件事。
-     真正的活交给 导入文件夹.py：它认得「一个 wav + 一个 cue」的整轨碟（按 CUE 拆）、
-     也认得一堆 flac 的普通专辑（直接复制），并复用 拆分CUE.py 的 CUE 解析。 */
+     真正的活交给 python 音乐库.py 导入：它认得「一个 wav + 一个 cue」的整轨碟（按 CUE 拆）、
+     也认得一堆 flac 的普通专辑（直接复制），内部复用 tools/拆轨.py 的 CUE 解析。 */
   if (pathname === '/api/import/probe' && req.method === 'POST') {
     return readBody(req, res, body => {
       let dir;
@@ -482,7 +515,7 @@ function handleApi(req, res, pathname) {
       if (!dir || typeof dir !== 'string') return sendJson(req, res, 400, { error: '没有给出目录' });
       if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory())
         return sendJson(req, res, 400, { error: '目录不存在：' + dir });
-      runPy(['--probe', dir], r => sendJson(req, res, r.code === 0 ? 200 : 500, r.json || { error: r.err }));
+      runPy(['--probe', dir], r => sendJson(req, res, r.code === 0 ? 200 : 500, annotateProbe(r.json) || { error: r.err }));
     });
   }
   if (pathname === '/api/import/folder' && req.method === 'POST') {

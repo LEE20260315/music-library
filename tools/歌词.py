@@ -26,7 +26,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LYR_DIR = os.path.join(BASE_DIR, "_lyrics")
 STATE_PATH = os.path.join(LYR_DIR, "_state.json")
 REPORT_PATH = os.path.join(LYR_DIR, "_report.md")

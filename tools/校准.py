@@ -33,7 +33,7 @@ try:
 except Exception:
     pass
 
-ROOT = Path(__file__).resolve().parent          # 音乐库根目录
+ROOT = Path(__file__).resolve().parent.parent   # 音乐库根目录
 LIB = ROOT / '无损'
 OUT_JS = ROOT / 'durations.js'
 BACKUP = ROOT / '.时长修正备份.json'             # 修正前的原始值，便于撤销

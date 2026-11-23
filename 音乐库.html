@@ -545,6 +545,8 @@ body.has-mini{padding-bottom:66px}
 .imp-note{font-size:11.5px;color:var(--ink-soft);line-height:1.7;margin:0 0 14px;white-space:pre-wrap}
 .imp-list{flex:1;min-height:0;overflow-y:auto;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:8px 0;font-size:12px}
 .imp-item{display:flex;gap:10px;align-items:baseline;padding:6px 2px;border-bottom:1px dotted var(--line)}
+.imp-pick{flex:0 0 auto;margin:0 2px 0 0;accent-color:var(--terra)}
+.imp-dup{font-size:10px;color:var(--terra);border:1px solid var(--terra);padding:1px 4px;white-space:nowrap}
 .imp-item:last-child{border-bottom:0}
 .imp-item .ia{font-family:var(--serif);font-weight:600}
 .imp-item .in{color:var(--ink-soft)}
@@ -774,7 +776,7 @@ body.has-mini{padding-bottom:66px}
   <button class="sm" id="miniOpen" title="打开唱片页"></button>
 </div>
 <script src="data.js" onerror="window.__dataErr=1"></script>
-<!-- durations.js 由「校准时长.py」生成：部分 FLAC 的头部时长写成了整张专辑长度，
+<!-- durations.js 由「python 音乐库.py 校准」生成：部分 FLAC 的头部时长写成了整张专辑长度，
      播放器用这里的真实值当进度条上限，才不会一拖就撞到文件末尾被判成播放结束。
      没有这个文件也能正常用，只是那几首曲目的时长会按文件头显示。 -->
 <script src="durations.js" onerror="window.__durErr=1"></script>
@@ -1592,7 +1594,7 @@ function autoSearchLyrics(t,artist){
   }).catch(err=>{$('lyrics').innerHTML='<div class="lyr-empty">'+(err&&err.message==='rate'?'歌词站休息一下，稍后再找找看':'我找找看歌词在哪里…（暂时没找到）')+'</div>';});
 }
 /* ===== 离线歌词 =====
-   全库歌词由「补歌词.py」抓成 _lyrics/a<专辑下标>.js，一个文件只装一张专辑：
+   全库歌词由「python 音乐库.py 歌词」抓成 _lyrics/a<专辑下标>.js，一个文件只装一张专辑：
      window.LIB_LYR[<专辑下标>] = { <曲目下标>: "<LRC 原文>" }
    为什么拆片：页面是 file:// 双击打开的，fetch 本地 JSON 会被 CORS 拦掉，只能靠 script 标签注入；
    而整库歌词有十几 MB，一次全装会让首页变慢，所以点到哪张专辑才加载哪一片。 */
@@ -2155,14 +2157,17 @@ function withTimeout(p,ms,label){
    取消之外的所有结局，都要有一个能读的标题和一句能照着做的下一步。 */
 function impShow(head,note,items,goText){
   const list=items||[];
-  const writable=list.filter(x=>!x.sec&&!x.block).length;
+  const writable=list.filter(x=>!x.sec&&!x.block&&x.pick).length;
   impHead.textContent=head;
   impNote.textContent=note||'—';
   impBar.hidden=true;
   impList.innerHTML=list.length?list.map(x=>x.sec
     ?'<div class="imp-sec">'+esc(x.sec)+'</div>'
     :'<div class="imp-item'+(x.block?' warn':'')+'">'+
+      (x.pick?'<input class="imp-pick" type="checkbox" data-rel="'+esc(x.rel)+'" '+(x.checked?'checked':'')+' aria-label="选择 '+esc(x.a)+'">':'')+
+      (x.dup?'<span class="imp-dup">重复</span>':'')+
       '<span class="ia">'+esc(x.a)+'</span><span class="in">'+esc(x.b)+'</span>'+
+      (x.dup?'<span class="iw">已有：'+esc(x.dup.artist+'《'+x.dup.album+'》')+'</span>':'')+
       (x.w?'<span class="iw">'+esc(x.w)+'</span>':'')+
       (x.c?'<span class="iq">'+esc(x.c)+'</span>':'')+'</div>'
   ).join(''):'<div class="imp-item"><span class="in">没有需要入库的专辑。</span></div>';
@@ -2317,7 +2322,7 @@ async function impStart(){
    这是真正意义上的「选一个目录把里面的唱片搬进库」，跟「扫 无损/ 找新目录」是两件事。
    页面没有系统选目录框可用（Chrome 157 那个回归），所以由服务端列目录，点着往下走。
    认出来的东西分两种：一个 wav/ape + 一个 cue 的整轨碟（按 CUE 拆），
-   和一整目录 flac/wav 的普通专辑（直接复制）。判断交给 导入文件夹.py。 */
+   和一整目录 flac/wav 的普通专辑（直接复制）。判断交给「python 音乐库.py 导入」。 */
 let ibPath=null, ibData=null, ibPicked=null;
 
 async function ibOpen(dir){
@@ -2467,7 +2472,7 @@ async function ibCommit(dir){
     'data.js 已备份为 '+c.backup+'，库里现在共 '+c.total+' 张。\n\n'+
     '今天的足迹：\n「'+c.update.title+'」\n'+c.update.text+'\n\n'+
     (bad.length?'有 '+bad.length+' 张没成功：\n'+bad.map(x=>'· '+x.dirname+'：'+x.msg).join('\n')+'\n\n':'')+
-    '想让新专辑有歌词和准确时长，在命令行跑：\n  python 补歌词.py --jobs 4\n  python 校准时长.py --fix',
+    '想让新专辑有歌词和准确时长，在命令行跑：\n  python 音乐库.py 歌词 --jobs 4\n  python 音乐库.py 校准 --fix',
     items.filter(x=>x.kind!=='fail').slice(0,12).map(x=>({a:x.dirname,b:x.msg,w:x.kind==='skip'?'已存在':''})),
     '知道了');
 }
@@ -2502,7 +2507,7 @@ async function impServer(){
       if(!h.quality)w.push('读不到音质');
       if(!h.year)w.push('目录名无年份');
       if(!h.cover)w.push('无封面图');
-      items.push({a:h.album||h.dirname,b:h.artist+' · '+h.count+' 曲',w:w.join('、'),c:h.quality});
+      items.push({rel:h.rel,pick:true,checked:!h.dup,dup:h.dup,a:h.album||h.dirname,b:h.artist+' · '+h.count+' 曲',w:w.join('、'),c:h.quality});
     }
   }
   if(pending.length){
@@ -2517,9 +2522,26 @@ async function impServer(){
   const tail=[pending.length?pending.length+' 张待拆分':'',odd.length?odd.length+' 张格式不支持':''].filter(Boolean).join('，');
   impShow(fresh.length?'发现 '+fresh.length+' 张可入库'+(tail?'，'+tail:''):'没有可写入的'+(tail?'（'+tail+'）':''),
     '写入方式：新专辑追加到 data.js 末尾（不改动已有顺序，否则歌词分片会错位），写之前先存一份 data.js.bak-时间。\n'+
-    (pending.length?'其中 '+pending.length+' 张是「整轨 + CUE」：整张盘只有一个音频文件，硬写进去会变成 1 首。\n先在命令行跑 python 拆分CUE.py，拆完再点一次入库。':''),
+    (pending.length?'其中 '+pending.length+' 张是「整轨 + CUE」：整张盘只有一个音频文件，硬写进去会变成 1 首。\n先在命令行跑 python 音乐库.py 拆轨，拆完再点一次入库。':''),
     items, fresh.length?'写入 '+fresh.length+' 张':'');
-  if(fresh.length)impGo.onclick=()=>impServerCommit(fresh.map(h=>h.rel));
+  if(fresh.length){
+    /* 重复项默认不勾选。一个都没勾时按钮要停用——否则会提交一个空数组，
+       服务端只会回一句「没有给出要入库的目录」，等于让人白点一次。 */
+    const updateGoText=()=>{
+      const checked=[...impList.querySelectorAll('.imp-pick:checked')];
+      const skipped=fresh.filter(h=>h.dup&&!checked.some(x=>x.dataset.rel===h.rel)).length;
+      impGo.disabled=!checked.length;
+      impGo.textContent=checked.length
+        ? '写入 '+checked.length+' 张'+(skipped?'（跳过 '+skipped+' 张重复）':'')
+        : '没有可写入的专辑'+(skipped?'（'+skipped+' 张重复）':'');
+    };
+    impGo.onclick=()=>{
+      const rels=[...impList.querySelectorAll('.imp-pick:checked')].map(x=>({rel:x.dataset.rel,force:!!x.closest('.imp-item').querySelector('.imp-dup')}));
+      if(rels.length)impServerCommit(rels);
+    };
+    impList.addEventListener('change',updateGoText);
+    updateGoText();
+  }
 }
 
 async function impServerCommit(rels){
@@ -2538,6 +2560,12 @@ async function impServerCommit(rels){
     impShow('写入失败','服务端写 data.js 时出错：'+(e&&e.message?e.message:e)+'\n已有的 .bak 可以用来还原，别自己改 data.js。',[],'');
     return;
   }
+  if(!r.added){
+    impBusy(false);
+    impShow('没有写入重复专辑','已跳过 '+(r.skippedDup||[]).length+' 张重复专辑，data.js 没有改动。',
+      (r.skippedDup||[]).map(x=>({a:x.rel,b:x.dup.artist+' · '+x.dup.album,w:'重复'})),'知道了');
+    return;
+  }
   ilog('已写入 '+r.added+' 张 / '+r.tracks+' 曲，备份 '+r.backup);
   // 页面就地更新：数据、数字、足迹、封面墙一起变，不用整页重载
   for(const al of (r.albums||[])){if(!IDX.has(al)){A.push(al);IDX.set(al,A.length-1);}}
@@ -2553,7 +2581,7 @@ async function impServerCommit(rels){
   impShow('入库完成：'+r.added+' 张 / '+r.tracks+' 曲',
     'data.js 的原件备份为 '+r.backup+'，库里现在共 '+r.total+' 张。\n\n'+
     '今天的足迹已并进 '+r.update.date+' 那一条：\n「'+r.update.title+'」\n'+r.update.text+'\n\n'+
-    '想让新专辑也有歌词和准确时长，在命令行跑一次：\n  python 补歌词.py --jobs 4\n  python 校准时长.py --fix',[],'');
+    '想让新专辑也有歌词和准确时长，在命令行跑一次：\n  python 音乐库.py 歌词 --jobs 4\n  python 音乐库.py 校准 --fix',[],'');
   impBusy(false);
 }
 
@@ -2701,7 +2729,7 @@ async function impPicker(){
     const noQ=albums.filter(a=>!a.quality||a.quality==='未标注').length;
     const note=[
       '写入方式：新专辑追加到 data.js 末尾（不改动已有顺序，否则歌词分片会错位），写之前先存一份 data.js.bak-时间。',
-      cueOnes.length?'其中 '+cueOnes.length+' 张是「整轨 + CUE」：整张盘只有一个音频文件，硬写进去会变成 1 首。\n先在命令行跑 python 拆分CUE.py，拆完再点一次入库。':'',
+      cueOnes.length?'其中 '+cueOnes.length+' 张是「整轨 + CUE」：整张盘只有一个音频文件，硬写进去会变成 1 首。\n先在命令行跑 python 音乐库.py 拆轨，拆完再点一次入库。':'',
       noQ?'有 '+noQ+' 张读不到音质信息，先标成「未标注」，不影响播放。':''
     ].filter(Boolean).join('\n');
     impShow(albums.length?'发现 '+albums.length+' 张可入库'+(cueOnes.length?'，'+cueOnes.length+' 张待拆分':'')
@@ -2763,7 +2791,7 @@ async function impCommit(root){
       'data.js 的原件备份为 data.js.bak-'+stamp+'。\n\n'+
       (beforeText?'今天已经有一条足迹了，按规矩并进同一条，接在末尾：':'今天的足迹已经写进首页右下角那条时间轴：')+
       '\n「'+(u?u.title:'')+'」'+(beforeText?'…；':'')+added+
-      '\n\n想让这几张也有歌词和准确时长，回到命令行跑一次：\n  python 补歌词.py --jobs 4\n  python 校准时长.py --fix\n路径全是相对的，这张盘换到别的电脑，插上双击本页就能用。',[],'');
+      '\n\n想让这几张也有歌词和准确时长，回到命令行跑一次：\n  python 音乐库.py 歌词 --jobs 4\n  python 音乐库.py 校准 --fix\n路径全是相对的，这张盘换到别的电脑，插上双击本页就能用。',[],'');
     impBusy(false);
   }catch(err){
     impBusy(false);
