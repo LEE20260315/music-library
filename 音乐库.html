@@ -94,7 +94,10 @@ html[data-theme="night"] .theme-btn .ic-moon{display:none}
 #main::-webkit-scrollbar{width:0;height:0}
 /* 窄屏（含手机）交还给正常文档流：一屏钉死在窄屏只会把封面压扁。
    这条必须排在基础 .layout 之后——媒体查询不加权重，写在前面会被覆盖。 */
-@media(max-width:1100px){
+@media(min-width:768px) and (max-width:900px){
+  .layout{grid-template-columns:minmax(0,1fr) 230px}
+}
+@media(max-width:767px){
   body{overflow-y:auto;overflow-x:hidden}
   .wrap{height:auto;padding-bottom:70px}
   .layout{grid-template-columns:1fr;flex:none}
@@ -1343,8 +1346,9 @@ function fadeTo(target,ms,token){
 // 否则一次被取消的淡入会把音量永久留在 0，听感上就是"没声音了"。
 async function playWithFade(token=++playToken){
   pausing=false;
-  // 先把整首下完（暂停后恢复时已经就绪，这里立刻返回）
-  const ok=await waitSrc();
+  // 原生音源在点击事件中就绪，保留浏览器要求的用户手势。
+  if(!isHttp()||MOBILE)startFetch();
+  const ok=srcReady||await waitSrc();
   if(token!==playToken)return;          // 等的过程中又换了别的歌
   if(!ok){
     syncPlaybackUI(false);
@@ -1352,6 +1356,7 @@ async function playWithFade(token=++playToken){
     $('now').innerHTML='<b>加载失败</b> · 网络中断或文件不可读，点播放键重试';
     return;
   }
+  nowLocked=false;
   setVolumeFactor(fadeEnabled?0:1);
   try{
     await audio.play();
@@ -1652,7 +1657,11 @@ function lyricFor(al,i){
   if(box.has(i))return box.get(i);
   let lines=null;
   const pack=window.LIB_LYR&&window.LIB_LYR[ai];
-  if(pack&&pack[i])lines=parseLrcText(pack[i]);
+  if(pack&&pack[i]){
+    // 歌词抓取器写入的是 [{t,l}, ...] 数组；旧版分片才是 LRC 字符串。
+    // 两种格式都兼容，避免分片 onload 把对象数组送进 s.split() 报脚本错误。
+    lines=Array.isArray(pack[i])?pack[i]:parseLrcText(pack[i]);
+  }
   if(!lines||!lines.length){
     try{
       const c=localStorage.getItem('dsh_lyr_'+normLyric(al.artist)+'_'+normLyric(t.n));
@@ -1743,21 +1752,11 @@ function syncLyric(force){
   }
   curLyricIdx=idx;
 }
-// 先完整缓存、再从本地播放。
-// 为什么这样做：无损文件码率高（24bit/176.4kHz 约 6Mbps），边下边播时
-// 一拖动进度条就要重新申请一截数据，弱网下会一直转圈。整首下完再播，
-// 拖动就是纯本地操作，跟插着盘听没区别——而且字节完全没动过，还是无损。
-// 注意：整首下完才播，所以文件越大等待越久；超过 MAX_PRELOAD 的直接退回边下边播。
-// 手机/平板的可用内存比桌机小得多，一首 195MB 的 24bit/176.4kHz 整首塞进 Blob
-// 很容易把标签页撑崩（iOS 上尤其明显），所以移动端把上限压到 160MB：
-// 超过的退回边下边播，安卓/iOS 对 FLAC 的流式播放本来就支持得很好。
+// 桌面端保留整曲缓存，移动端用浏览器分段加载。
 const MOBILE=/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)||
   (matchMedia&&matchMedia('(pointer:coarse)').matches&&/Macintosh/.test(navigator.userAgent));
-const MAX_PRELOAD=(MOBILE?160:512)*1024*1024;
+const MAX_PRELOAD=512*1024*1024;
 let srcReady=false;
-/* 一次下载失败不该让这首永远播不了：srcPromise 留着失败状态的话，
-   下次点播放还是拿到同一个失败结果，「点播放键重试」这句提示就成了空话。 */
-function dropSrcPromise(){srcPromise=null;}
 
 function isHttp(){return location.protocol==='http:'||location.protocol==='https:';}
 
@@ -1822,10 +1821,9 @@ function startFetch(){
   if(!url)return;
   const seq=srcSeq;
 
-  // 本地双击打开（file://）：fetch 会被 CORS 拦掉，直接把相对路径给 <audio>
-  if(!isHttp()){
-    audio.src=url;audio.load();srcReady=true;
-    srcPromise=Promise.resolve(true);return;
+  // 移动端和 file:// 直接交给浏览器加载音频。
+  if(!isHttp()||MOBILE){
+    audio.src=url;audio.load();srcReady=true;return;
   }
 
   srcPromise=new Promise((resolve,reject)=>{
@@ -1842,7 +1840,8 @@ function startFetch(){
     xhr.onreadystatechange=()=>{
       if(xhr.readyState!==2||seq!==srcSeq||!xhr)return;
       const len=+(xhr.getResponseHeader('Content-Length')||0);
-      if(len>MAX_PRELOAD){
+      if((xhr.status===200||xhr.status===206)&&len>MAX_PRELOAD){
+        xhr.onabort=null;
         try{xhr.abort();}catch(e){}
         if(seq!==srcSeq)return;
         srcXhr=null;srcPromise=null;
@@ -1867,7 +1866,7 @@ function startFetch(){
       hideBuffering();armMetaWatchdog();resolve(true);
     };
     xhr.onerror=()=>{if(seq!==srcSeq)return;srcXhr=null;srcPromise=null;reject(new Error('网络错误'));};
-    xhr.onabort=()=>{srcPromise=null;reject(new Error('abort'));};
+    xhr.onabort=()=>{if(seq===srcSeq){srcXhr=null;srcPromise=null;}reject(new Error('abort'));};
     xhr.send();
   });
   // 错误交给调用处处理，这里吞掉以免出现 unhandled rejection
@@ -2098,7 +2097,12 @@ audio.addEventListener('ended',()=>{
   nowLocked=true;syncPlaybackUI(false);stopInline();$('now').innerHTML='<b>播放完毕</b> · '+esc(cur.album);
 });
 audio.addEventListener('timeupdate',()=>{if(!dragging)updateProgress();syncLyric();});
-audio.addEventListener('error',()=>{disarmMetaWatchdog();++playToken;setVolumeFactor(1);nowLocked=true;syncPlaybackUI(false);$('now').innerHTML='<b>无法播放</b> · 请用 Chrome/Edge 打开，或检查文件是否完整';});
+audio.addEventListener('error',()=>{
+  if(!srcReady||!audio.error)return;
+  srcReady=false;srcPromise=null;
+  disarmMetaWatchdog();++playToken;setVolumeFactor(1);nowLocked=true;syncPlaybackUI(false);
+  $('now').innerHTML='<b>无法播放</b> · 点播放键重试，或检查网络与音频格式';
+});
 // 回到页面时补一次，避免后台节流导致进度条停住
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)updateProgress();});
 // 夜间模式记在本地，下次打开还是你上次选的样子
