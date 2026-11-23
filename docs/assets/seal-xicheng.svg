@@ -1,11 +1,22 @@
-﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <rect x="8" y="8" width="240" height="240" rx="6"
-        fill="none" stroke="#9C2A2A" stroke-width="10"
-        transform="rotate(-3 128 128)" />
-  <text x="128" y="118" text-anchor="middle"
-        font-family="serif" font-size="64" font-weight="700"
-        fill="#9C2A2A" transform="rotate(-3 128 128)">西城</text>
-  <text x="128" y="200" text-anchor="middle"
-        font-family="serif" font-size="64" font-weight="700"
-        fill="#9C2A2A" transform="rotate(-3 128 128)">閒人</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <filter id="age" x="-12%" y="-12%" width="124%" height="124%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.032" numOctaves="4" seed="7" result="warp"/>
+      <feDisplacementMap in="SourceGraphic" in2="warp" scale="8" result="rough"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.5 0.62" numOctaves="3" seed="19" result="grain"/>
+      <feColorMatrix in="grain" type="matrix"
+        values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 4.2 0 -2.72" result="pits"/>
+      <feComposite in="rough" in2="pits" operator="out"/>
+    </filter>
+  </defs>
+  <g filter="url(#age)" transform="rotate(-2 128 128)">
+    <path d="M24 30 L118 20 L233 27 L239 116 L235 230 L131 238 L25 232 L18 124 Z"
+          fill="none" stroke="#9C2A2A" stroke-width="11" stroke-linejoin="round"/>
+    <g fill="#9C2A2A" font-family="'KaiTi','STKaiti','Kaiti SC','DFKai-SB',serif" font-weight="700" font-size="82" text-anchor="middle">
+      <text x="181" y="122" transform="rotate(1.5 181 96)">西</text>
+      <text x="179" y="216" transform="rotate(-2 179 190)">城</text>
+      <text x="77" y="120" transform="rotate(-1.5 77 94)">閒</text>
+      <text x="79" y="215" transform="rotate(2 79 189)">人</text>
+    </g>
+  </g>
 </svg>
