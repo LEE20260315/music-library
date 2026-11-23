@@ -942,13 +942,13 @@ function renderStats(){
   $('sTrk').textContent=A.reduce((n,x)=>n+(x.tracks?x.tracks.length:0),0).toLocaleString();
   $('sIntro').textContent=A.filter(x=>x.intro).length.toLocaleString();
 }
-/* 足迹正文常是一长串用「；」接起来的记录。整段当一个文本节点时，
-   CSS 只能控制行距、没法给「一件事」之间留白；拆成一句一段，
-   扫描起来才有段落感，也不至于挤成一团。 */
+/* 足迹正文常是一长串用「；」接起来的记录。早先按「；」拆成一句一段，
+   想让每件事单独成行；可那些段大多只有一两行，末行按规矩左对齐，
+   右缘于是留下五六道参差的半行空白，看着像没排版。
+   现在合成一段：「；」留在行内继续当分隔，除整条末行外每行都两端抵满。 */
 function timelineBody(text){
-  const parts=String(text||'').split('；').map(s=>s.trim()).filter(Boolean);
-  if(parts.length<2)return esc(text);
-  return parts.map(s=>'<p>'+esc(s)+'</p>').join('');
+  const t=String(text||'').replace(/[；;\s]+$/,'');
+  return t?'<p>'+esc(t)+'</p>':'';
 }
 function renderTimeline(){
   $('timeline').innerHTML=(D.updates||[]).slice().reverse()
@@ -2189,6 +2189,17 @@ function impHide(){
 $('impCancel').onclick=impHide;
 impMask.addEventListener('click',e=>{if(e.target===impMask)impHide();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!impMask.hidden)impHide();});
+/* 真正动磁盘的那几步（写 data.js、按 CUE 拆分整轨碟）要几十秒到几分钟。
+   只把弹窗里的 impGo 改成「写入中…」不够——人的眼睛盯的是页头那个
+   「＋ 专辑入库」，它一直没变，看着就像还没开始。所以执行期间把页头按钮
+   也占住并写「正在入库…」，结束时不分成败一律复原。 */
+const IMP_IDLE='＋ 专辑入库';
+function impBusy(on){
+  const b=$('importBtn'); if(!b)return;
+  b.disabled=!!on;
+  if(on){b.textContent='正在入库…';b.dataset.busy='1';}
+  else{b.textContent=IMP_IDLE;delete b.dataset.busy;}
+}
 
 /* 整轨 + CUE：一个音频文件 + 一个 .cue，里面写着 12 首。
    直接按文件数入库会写成"1 首"的专辑，所以这类只登记、不写。 */
@@ -2403,6 +2414,7 @@ async function ibProbe(dir){
 
 async function ibCommit(dir){
   impGo.disabled=true;impGo.textContent='导入中…';
+  impBusy(true);
   impProgress('正在导入…','整轨碟在逐轨转 FLAC。这一步可能要几分钟，别关页面。',0);
   ilog('从文件夹导入：'+dir);
   let r;
@@ -2412,6 +2424,7 @@ async function ibCommit(dir){
     if(r.error)throw new Error(r.error);
     if(!r.ok)throw new Error(r.error||'导入失败');
   }catch(e){
+    impBusy(false);
     impShow('导入失败',(e&&e.message?e.message:e)+'\n已经放进库里的部分不会回滚，可以再点一次（已存在的目录会跳过）。',[],'');
     impGo.disabled=false;impGo.textContent='重试';impGo.onclick=()=>ibCommit(dir);
     return;
@@ -2422,6 +2435,7 @@ async function ibCommit(dir){
   ilog('已落盘 '+ok.length+' 张，其中跳过 '+skip.length+'，失败 '+bad.length);
   // 落盘之后再走一次写 data.js（同一条已验证的路径）
   if(!rels.length){
+    impBusy(false);
     impShow('没有新东西可写',skip.length?'这些目录已经在库里了，跳过 ' + skip.length + ' 张。':'一张都没落盘。',
       items.map(x=>({a:x.dirname,b:x.msg||'',w:x.kind==='skip'?'已存在':''})),
       bad.length?'知道了':'知道了');
@@ -2435,6 +2449,7 @@ async function ibCommit(dir){
     c=await res.json();
     if(c.error)throw new Error(c.error);
   }catch(e){
+    impBusy(false);
     impShow('文件已放好，但写 data.js 失败',
       '专辑文件已经落进 无损/ 了，只是没写进 data.js。\n报错：'+(e&&e.message?e.message:e)+'\n'+
       '再点一次「专辑入库」→ 服务端扫描会看到这些新目录，直接写进去即可。',[],'');
@@ -2447,6 +2462,7 @@ async function ibCommit(dir){
     if(i>=0)D.updates[i]=c.update;else (D.updates=D.updates||[]).push(c.update);
   }
   build();renderStats();renderTimeline();
+  impBusy(false);
   impShow('导入完成：'+c.added+' 张 / '+c.tracks+' 曲',
     'data.js 已备份为 '+c.backup+'，库里现在共 '+c.total+' 张。\n\n'+
     '今天的足迹：\n「'+c.update.title+'」\n'+c.update.text+'\n\n'+
@@ -2508,6 +2524,7 @@ async function impServer(){
 
 async function impServerCommit(rels){
   impGo.disabled=true;impGo.textContent='写入中…';
+  impBusy(true);
   ilog('提交写入：'+rels.length+' 张');
   let r;
   try{
@@ -2516,6 +2533,7 @@ async function impServerCommit(rels){
     if(r.error)throw new Error(r.error);
   }catch(e){
     impGo.disabled=false;impGo.textContent='重试写入';
+    impBusy(false);
     ilog('写入失败：'+(e&&e.message?e.message:e));
     impShow('写入失败','服务端写 data.js 时出错：'+(e&&e.message?e.message:e)+'\n已有的 .bak 可以用来还原，别自己改 data.js。',[],'');
     return;
@@ -2536,6 +2554,7 @@ async function impServerCommit(rels){
     'data.js 的原件备份为 '+r.backup+'，库里现在共 '+r.total+' 张。\n\n'+
     '今天的足迹已并进 '+r.update.date+' 那一条：\n「'+r.update.title+'」\n'+r.update.text+'\n\n'+
     '想让新专辑也有歌词和准确时长，在命令行跑一次：\n  python 补歌词.py --jobs 4\n  python 校准时长.py --fix',[],'');
+  impBusy(false);
 }
 
 /* 没有服务器（file:// 双击打开）时的老路径：浏览器自己选目录、自己写 data.js */
@@ -2707,6 +2726,7 @@ async function impCommit(root){
   const n=impPlan.length;
   const trk=impPlan.reduce((k,a)=>k+a.tracks.length,0);
   impGo.disabled=true;impGo.textContent='写入中…';
+  impBusy(true);
   ilog('开始写入：'+n+' 张 / '+trk+' 曲');
   try{
     const now=new Date();
@@ -2744,7 +2764,9 @@ async function impCommit(root){
       (beforeText?'今天已经有一条足迹了，按规矩并进同一条，接在末尾：':'今天的足迹已经写进首页右下角那条时间轴：')+
       '\n「'+(u?u.title:'')+'」'+(beforeText?'…；':'')+added+
       '\n\n想让这几张也有歌词和准确时长，回到命令行跑一次：\n  python 补歌词.py --jobs 4\n  python 校准时长.py --fix\n路径全是相对的，这张盘换到别的电脑，插上双击本页就能用。',[],'');
+    impBusy(false);
   }catch(err){
+    impBusy(false);
     ilog('写入失败：'+(err&&err.name?err.name+' ':'')+(err&&err.message?err.message:err));
     impShow('写入失败','写 data.js 时出错：'+(err&&err.message?err.message:err)+'\n如果刚才已经建了 .bak，可以用它覆盖回去。\n请把这段错误原样告诉我，别自己改 data.js。',[],'');
   }
