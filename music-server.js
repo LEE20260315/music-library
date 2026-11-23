@@ -323,10 +323,13 @@ function commitImport(rels) {
   for (const al of picked) data.albums.push(al);       // 只能 push 到末尾：_lyrics 分片按数组下标命名
   data.generated = day;
   const trk = picked.reduce((k, a) => k + a.tracks.length, 0);
-  addUpdate(data, day, '新专辑入库 ' + picked.length + ' 张',
-    '新增 ' + picked.length + ' 张（' + trk + ' 曲）：' +
-    picked.map(a => a.artist + '《' + a.album + '》').slice(0, 4).join('、') +
-    (picked.length > 4 ? ' 等' : ''));
+  /* 足迹是给人扫一眼的索引，不是清单：一句话说清「加了什么」就够。
+     专辑多于 3 张时只点两个代表，其余的用「等 N 张」带过——
+     以前把 10 张专辑名全列出来，右侧那栏被撑成一长篇，翻半天读不完。 */
+  const names = picked.map(a => a.artist + '《' + a.album + '》');
+  const brief = names.length <= 3 ? names.join('、')
+    : names.slice(0, 2).join('、') + ' 等 ' + names.length + ' 张';
+  addUpdate(data, day, '新专辑入库', brief + '，共 ' + trk + ' 首');
   const txt = 'window.LIB_DATA=' + JSON.stringify(data) + ';';
   fs.writeFileSync(path.join(ROOT, 'data.js'), txt, 'utf8');
   const u = data.updates.find(x => x.date === day);

@@ -36,8 +36,10 @@ header{padding:30px 0 14px;position:relative;flex:none}
    斑驳感由页面底部那个 #worn 滤镜做：先把字形向内腐蚀 1.2px 求差集得到"轮廓一圈"，
    再用分形噪声只保留其中一部分并从原字里挖掉——笔画边缘被啃出细碎缺口，
    字形本身不动，所以字还是实的、读得清。 */
-h1{font-family:var(--brand);font-size:clamp(34px,4.6vw,58px);font-weight:600;line-height:1.1;margin:0 0 8px;
+h1{font-family:var(--brand);font-size:clamp(28px,3.3vw,44px);font-weight:600;line-height:1.08;margin:0 0 6px;
   letter-spacing:.035em;font-feature-settings:"palt" 0;filter:url(#worn)}
+/* 中文那一半比 "Sirius." 小一档，紧贴着它，不要各占一半气势 */
+h1 .zh{font-size:.74em;letter-spacing:.06em;margin-left:.18em}
 /* 面包屑那行小字也给同样的字味，但斑驳更轻，否则 11px 会被啃得认不出 */
 .eyebrow{font-family:var(--brand)}
 h1 .dot{color:var(--terra)}
@@ -86,7 +88,7 @@ html[data-theme="night"] .theme-btn .ic-moon{display:none}
 }
 /* 首页左右结构：内容 + 侧栏足迹 */
 .layout{display:grid;grid-template-columns:minmax(0,1fr) 292px;gap:26px;align-items:stretch;flex:1;min-height:0}
-.content{display:flex;flex-direction:column;min-height:0;min-width:0}
+.content{position:relative;display:flex;flex-direction:column;min-height:0;min-width:0}
 /* 卡片区：自己滚，但不画滑块 */
 #main{position:relative;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
 #main::-webkit-scrollbar{width:0;height:0}
@@ -99,10 +101,11 @@ html[data-theme="night"] .theme-btn .ic-moon{display:none}
   #main{overflow:visible}
   .sidebar{min-height:240px;max-height:70vh}
 }
-.toolbar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--paper) 93%,transparent);backdrop-filter:blur(10px);padding:12px 0;border-bottom:1px solid var(--line);margin-bottom:22px}
-.toolrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.tabs{display:flex;gap:6px;flex-wrap:wrap}
-.tab{border:1px solid transparent;background:transparent;color:var(--ink-soft);padding:7px 15px;border-radius:999px;cursor:pointer;font-size:13px;transition:.2s}
+.toolbar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--paper) 93%,transparent);backdrop-filter:blur(10px);padding:10px 0;border-bottom:1px solid var(--line);margin-bottom:18px}
+.toolrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+/* 标签行不铺满整行：右侧留给搜索框，两者中间自然留白，视线不会被拉成一条长线 */
+.tabs{display:flex;gap:4px;flex-wrap:wrap;flex:0 1 auto}
+.tab{border:1px solid transparent;background:transparent;color:var(--ink-soft);padding:6px 12px;border-radius:999px;cursor:pointer;font-size:12.5px;transition:.2s}
 .tab:hover{background:var(--paper-2);color:var(--ink)}.tab.on{background:var(--ink);color:var(--paper)}
 .search{margin-left:auto;position:relative}.search input{width:210px;border:1px solid var(--line);background:var(--paper-2);color:var(--ink);border-radius:999px;padding:8px 14px 8px 32px;font-size:13px;outline:none;transition:.2s}
 .search input:focus{width:260px;border-color:var(--terra)}.search::before{content:"⌕";position:absolute;left:11px;top:5px;color:var(--ink-faint);font-size:16px}
@@ -176,7 +179,7 @@ body.has-mini{padding-bottom:66px}
 /* ===== 随缘封面墙 =====
    不做网格也不做对齐的排：每张封面随机一个大中小号、随机一个倾角，像把 CD 从盒子里
    倒在地上。位置由 layoutWall() 试几十遍挑最好的一版，卡片自己是绝对定位的。 */
-.wallwrap{position:relative;height:100%;min-height:0;margin-right:72px}
+.wallwrap{position:relative;height:100%;min-height:0;margin-right:44px}
 .wall{position:absolute;inset:0;perspective:1400px}
 .wall .card{position:absolute;text-align:left;transform:rotate(var(--rot,0deg));transform-style:preserve-3d;
   will-change:transform,opacity;animation:cardIn .6s cubic-bezier(.22,.8,.3,1) both;
@@ -235,7 +238,7 @@ body.has-mini{padding-bottom:66px}
 @media(prefers-reduced-motion:reduce){
   .wall .card,.wall.leaving .card{animation:none}
 }
-/* 「换一批」：贴在封面区右边缘的一枚竖排书签。墙右边留了 64px 给它，互不遮挡。 */
+/* 早期版本的「换一批」书签样式，已废弃（现在按钮在工具栏里），保留注释说明来历。 */
 /* 数据加载失败时的重试钮：不要复用 .shuffle-main，
    那是贴在墙右边的竖排书签（writing-mode:vertical-rl + 62x186 固定尺寸），
    拿来当普通按钮会变成一条竖着的细长块。这里单独一个朴素样式。 */
@@ -247,7 +250,11 @@ body.has-mini{padding-bottom:66px}
 .retry-btn .sm-t{font-size:15px;letter-spacing:.06em}
 .retry-btn .sm-s{font-size:8px;letter-spacing:.24em;font-family:var(--sans);opacity:.62}
 
-.shuffle-main{position:fixed;left:auto;top:50%;transform:translateY(-50%);
+/* 「换一批」是一枚竖排书签，吸附在「库的足迹」那张卡片的左边框上：
+   右边缘正好压在边框线上，左半身探进封面区。.wallwrap 右边留 72px 给它，
+   两不相犯。位置全部由 CSS 算，不再用 JS 读 getBoundingClientRect——
+   那个值乘过 :root 的 zoom，1920 宽下会把书签推到封面上去。 */
+.shuffle-main{position:absolute;top:50%;right:-26px;transform:translateY(-50%);
   width:62px;height:186px;border-radius:20px;cursor:pointer;z-index:30;
   border:1px solid color-mix(in srgb,var(--terra) 32%,transparent);
   background:var(--paper);color:var(--terra);font-family:var(--serif);
@@ -262,37 +269,41 @@ body.has-mini{padding-bottom:66px}
 /* 点下去抖一下，告诉手"收到了" */
 .shuffle-main.spin{animation:shuffleNudge .5s ease}
 @keyframes shuffleNudge{0%{transform:translateY(-50%)}38%{transform:translateY(calc(-50% + 8px))}100%{transform:translateY(-50%)}}
-/* 窄屏：竖排书签太占地方，改回右下角的圆钮；墙交还给普通网格 */
+/* 窄屏：单列布局里没有那条边框可吸附，书签改回封面墙下方的圆钮 */
 @media(max-width:1100px){
   .wallwrap{margin-right:0;height:auto}
   .wall{position:static;display:grid;grid-template-columns:repeat(auto-fill,minmax(122px,1fr));gap:16px}
   .wall .card{position:static;width:auto!important;transform:none;animation-name:cardIn}
   .wall .card:hover{transform:none}
-  .shuffle-main{position:static;margin:22px auto 4px;right:auto;left:auto;top:auto;transform:none;
+  .shuffle-main{position:static;margin:22px auto 4px;transform:none;
     width:118px;height:118px;border-radius:50%;gap:3px;
     border:1px solid color-mix(in srgb,var(--terra) 32%,transparent);box-shadow:0 10px 24px -16px var(--shadow-2)}
   .shuffle-main:hover{transform:translateY(-2px)}
+  .shuffle-main:active{transform:scale(.97)}
   .shuffle-main .sm-t{writing-mode:horizontal-tb;font-size:16px;letter-spacing:.06em}
   .shuffle-main .sm-s{writing-mode:horizontal-tb;font-size:8px;letter-spacing:.24em}
   .shuffle-main.spin{animation:none}
 }
 /* 侧栏：库的足迹树形 */
-.sidebar{background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:20px 18px;box-shadow:var(--shadow);
+.sidebar{background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:16px 15px;box-shadow:var(--shadow);
   display:flex;flex-direction:column;min-height:0;overflow:hidden}
 /* 足迹比一屏高：鼠标停在这块上滚轮就滚它，条不画出来（和歌词区同一种做法） */
 .sidebar .tree{flex:1;min-height:0;overflow-y:auto;scrollbar-width:none;-ms-overflow-style:none;overscroll-behavior:contain}
 .sidebar .tree::-webkit-scrollbar{width:0;height:0}
-.sidebar h2{font-family:var(--serif);font-size:18px;margin:0 0 4px;color:var(--terra)}
-.sidebar .sbsub{font-size:11px;color:var(--ink-faint);letter-spacing:.06em;margin-bottom:16px}
-.tree{list-style:none;margin:0;padding:0}.tree li{position:relative;padding:0 0 14px 20px;border-left:1px solid var(--line);margin-left:5px}
+.sidebar h2{font-family:var(--serif);font-size:16px;margin:0 0 3px;color:var(--terra)}
+.sidebar .sbsub{font-size:10px;color:var(--ink-faint);letter-spacing:.06em;margin-bottom:12px}
+.tree{list-style:none;margin:0;padding:0}.tree li{position:relative;padding:0 0 11px 15px;border-left:1px solid var(--line);margin-left:4px}
 .tree li:last-child{border-left-color:transparent;padding-bottom:0}
-.tree li::before{content:"";position:absolute;left:-5px;top:3px;width:9px;height:9px;border-radius:50%;background:var(--terra);box-shadow:0 0 0 3px var(--paper-2)}
-.tree li::after{content:"";position:absolute;left:-1px;top:12px;width:9px;height:1px;background:var(--line)}
+.tree li::before{content:"";position:absolute;left:-4px;top:3px;width:7px;height:7px;border-radius:50%;background:var(--terra);box-shadow:0 0 0 3px var(--paper-2)}
+.tree li::after{content:"";position:absolute;left:-1px;top:10px;width:7px;height:1px;background:var(--line)}
 .tree li:last-child::after{display:none}
 /* 足迹是给人读的：字号按正文来（11.5 / 15 / 12.5），不要再压到 10px */
-.tree .d{font-size:11.5px;color:var(--terra);font-weight:700;letter-spacing:.02em}
-.tree .t{font-family:var(--serif);font-size:15px;font-weight:600;margin:3px 0 4px;line-height:1.45}
-.tree .x{font-size:12.5px;color:var(--ink-soft);line-height:1.7}
+.tree .d{font-size:10.5px;color:var(--terra);font-weight:700;letter-spacing:.02em}
+.tree .t{font-family:var(--serif);font-size:13px;font-weight:600;margin:2px 0 3px;line-height:1.4}
+/* 足迹正文：11.5px / 1.55 行距，一段一句、段间只留 4px——它是索引，不是散文 */
+.tree .x{font-size:11.5px;color:var(--ink-soft);line-height:1.55}
+.tree .x p{margin:0 0 4px;text-indent:0}
+.tree .x p:last-child{margin-bottom:0}
 .empty{padding:70px 0;text-align:center;color:var(--ink-faint);font-family:var(--serif);font-size:17px}
 /* ===== 播放器 ===== */
 /* 进出唱片页走同一条"上浮 + 淡入淡出"曲线，返回首页不再是硬切 */
@@ -310,9 +321,12 @@ body.has-mini{padding-bottom:66px}
    中间的播放器整体包在 .pstage 里（黑胶 + 曲目列表 + 歌词），和左右两张卡片同高、顶部齐平。 */
 .pinner{max-width:none;margin:0 auto;padding:10px 22px;flex:1;min-height:0;width:100%;
   display:grid;grid-template-areas:"artist stage album";
-  /* 两侧卡片加宽到 23vw（1424 视口约 327px，原来只有 236px），中间播放器因此窄掉约 2/10。
-     缩掉的宽度全部由歌词让出来（.pbody 的曲目列宽不变），黑胶、唱臂、按钮的尺寸一律不动。 */
-  grid-template-columns:minmax(178px,clamp(236px,23vw,380px)) minmax(0,1fr) minmax(178px,clamp(236px,23vw,380px));gap:16px;
+  /* 宽度按黄金比例从「歌词」反推：歌词 : 侧卡 = 1.618 : 1。
+     也就是说 2C + 1.618C = 可用宽 → C = 可用宽 ÷ 3.618。
+     分母 3.618 就是 φ² 的近似（1.618 × 2.236），把左右两张卡和中间的歌区
+     一次算清。具体数值由 fitSideCards() 量出可用宽后写进 --card-w——
+     这段算术放 CSS 里做不了：可得宽要减掉曲目列宽和三条间距。 */
+  grid-template-columns:var(--card-w,272px) minmax(0,1fr) var(--card-w,272px);gap:16px;
   /* 行高撑满视口，中间的播放器才能吃掉全部高度。
      start：两侧卡片不被拉成整列高，多高就多高，顶端对齐曲目框（偏移由 JS 算）。 */
   grid-template-rows:minmax(0,1fr);align-items:start}
@@ -394,13 +408,15 @@ body.has-mini{padding-bottom:66px}
   /* 左右两张卡片一样大：都从「曲目」框的顶线开始，高度就等于曲目框的高度。
      两个值由 fitSideCards() 按实际布局算出来。 */
   margin-top:var(--card-off,0px);height:var(--card-h,78vh);
-  background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:17px 16px;box-shadow:var(--shadow)}
-/* 标题与正文之间空一行（1em 空白），下面是正文自己的滚动区 */
-.pcol-h{flex:none;font-family:var(--serif);font-size:17px;color:var(--terra);margin:0 0 1.05em;font-weight:600;line-height:1.2}
+  background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:18px 17px;box-shadow:var(--shadow)}
+/* 标题与正文之间空一行，下面是正文自己的滚动区 */
+.pcol-h{flex:none;font-family:var(--serif);font-size:16px;color:var(--terra);margin:0 0 .8em;font-weight:600;line-height:1.2}
 /* 正文占满剩余高度：内容多了在卡片里滚（滚轮即可，不画拖动条），
    少了也不硬撑——卡片本身是等高的，留白在下面。 */
-.pcol-t{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;font-size:15px;line-height:1.9;color:var(--ink-soft);white-space:pre-wrap;text-align:justify}
-.pcol-t p{margin:0 0 .75em;text-indent:2em;text-align:justify}
+/* 正文字号跟首页「库的足迹」走一档：13.5px / 1.7 行距。原来是 15px / 1.9，
+   在窄卡里一行只放得下二十来个字，行距又松，读起来像散了架。 */
+.pcol-t{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;font-size:13.5px;line-height:1.7;color:var(--ink-soft);white-space:pre-wrap;text-align:justify}
+.pcol-t p{margin:0 0 .55em;text-indent:2em;text-align:justify}
 .pcol-t p:last-child{margin-bottom:0}
 .pcol-t.muted{color:var(--ink-faint);font-style:italic;font-family:var(--serif)}
 /* 播放页不重复首页那句脚注：这一行字在首页已经有了，留在唱片页只是从歌词区抢走 30px */
@@ -553,7 +569,7 @@ body.has-mini{padding-bottom:66px}
       </button>
     </div>
     <div class="eyebrow">E DRIVE · LOSSLESS COLLECTION</div>
-    <h1>Sirius<span class="dot">.</span> 无损音乐库</h1>
+    <h1>Sirius<span class="dot">.</span><span class="zh">无损音乐库</span></h1>
     <!-- 副标题和四个数字并成一行：纵向省下的空间全部让给封面墙 -->
     <div class="subrow">
       <div class="sub">把每一张唱片，慢慢听完整。</div>
@@ -575,6 +591,10 @@ body.has-mini{padding-bottom:66px}
         </div>
       </div>
       <main id="main"></main>
+      <!-- 「换一批」是吸附在右侧「库的足迹」边框上的竖排书签：
+           放在 .content 里而不是 #main 里，因为 #main 每次重建会把子节点冲掉。
+           定位由 CSS 算（.content 是定位父级），不再用 JS 读 rect——那个值乘过 zoom。 -->
+      <button class="shuffle-main" id="shuffleBtn" type="button" aria-label="换一批专辑"><span class="sm-t">换一批</span><span class="sm-s">SHUFFLE</span></button>
     </div>
     <aside class="sidebar">
       <h2>库的足迹</h2>
@@ -880,9 +900,17 @@ function renderStats(){
   $('sTrk').textContent=A.reduce((n,x)=>n+(x.tracks?x.tracks.length:0),0).toLocaleString();
   $('sIntro').textContent=A.filter(x=>x.intro).length.toLocaleString();
 }
+/* 足迹正文常是一长串用「；」接起来的记录。整段当一个文本节点时，
+   CSS 只能控制行距、没法给「一件事」之间留白；拆成一句一段，
+   扫描起来才有段落感，也不至于挤成一团。 */
+function timelineBody(text){
+  const parts=String(text||'').split('；').map(s=>s.trim()).filter(Boolean);
+  if(parts.length<2)return esc(text);
+  return parts.map(s=>'<p>'+esc(s)+'</p>').join('');
+}
 function renderTimeline(){
   $('timeline').innerHTML=(D.updates||[]).slice().reverse()
-    .map(u=>'<li><div class="d">'+esc(u.date)+'</div><div class="t">'+esc(u.title)+'</div><div class="x">'+esc(u.text)+'</div></li>').join('');
+    .map(u=>'<li><div class="d">'+esc(u.date)+'</div><div class="t">'+esc(u.title)+'</div><div class="x">'+timelineBody(u.text)+'</div></li>').join('');
 }
 renderStats();renderTimeline();
 
@@ -951,12 +979,9 @@ function render(){
     return;
   }
   $('main').innerHTML=
-    '<div class="wallwrap"><div class="wall '+FX[fxIdx%FX.length]+'" id="wall">'+sample.map((al,i)=>card(al,i)).join('')+'</div></div>'+
-    '<button class="shuffle-main" id="shuffleBtn" type="button" aria-label="换一批专辑">'+
-      '<span class="sm-t">换一批</span><span class="sm-s">SHUFFLE</span></button>';
+    '<div class="wallwrap"><div class="wall '+FX[fxIdx%FX.length]+'" id="wall">'+sample.map((al,i)=>card(al,i)).join('')+'</div></div>';
   fxIdx++;
   layoutWall();
-  positionShuffle();
   restoreInline();
 }
 const POOL_SIZE=44;                         // 一屏放不下这么多，多备一些，落位算法才有得挑
@@ -1067,16 +1092,9 @@ function layoutWall(){
   for(let i2=n;i2<cards.length;i2++)cards[i2].style.display='none';
   lastPicked=new Set(cards.slice(0,n).map(el=>+el.dataset.i));
 }
-/* 「换一批」贴在封面区右缘：跟随 #main 的右边界，而不是视口右边界（右边还有侧栏） */
-function positionShuffle(){
-  const b=$('shuffleBtn'),m=$('main');
-  if(!b||!m)return;
-  if(innerWidth<=1100){b.style.right='';b.style.top='';return;}
-  const r=m.getBoundingClientRect();
-  b.style.right=Math.max(0,Math.round(innerWidth-r.right))+'px';
-  b.style.top=Math.round(r.top+r.height/2)+'px';
-}
-addEventListener('resize',()=>{clearTimeout(wallTimer);wallTimer=setTimeout(()=>{layoutWall();positionShuffle();},140);});
+/* 「换一批」书签的位置全交给 CSS（.content 里 absolute + right:-26px），
+   以前那个用 getBoundingClientRect 算 right 的函数只会因为 zoom 双重缩放而漂移，已经删掉。 */
+addEventListener('resize',()=>{clearTimeout(wallTimer);wallTimer=setTimeout(layoutWall,140);});
 function card(al,i){
   const u=imgUrl(al);
   const cover=u?'<img loading="lazy" src="'+u+'" alt="">':'<div class="ph"><b>'+esc((al.album||'♪').trim().charAt(0))+'</b></div>';
@@ -1094,16 +1112,17 @@ function swapBatch(){
     wall.classList.add('leaving');
     clearTimeout(swapTimer);
     swapTimer=setTimeout(()=>{
-      build();                       // render() 会重建 #wall 与按钮
+      build();                       // 只重建 #wall；「换一批」是静态节点，自己还在
       const b=$('shuffleBtn');if(b)b.classList.add('spin');
       setTimeout(()=>{const b2=$('shuffleBtn');if(b2)b2.classList.remove('spin');},520);
       swapping=false;
     },300);
   }else{build();swapping=false;}
 }
-// 按钮每次 build 都会重建，所以统一走 #main 的委托，不给按钮绑 onclick
+// 「换一批」现在在工具栏里（#main 之外），是静态节点、不再随 build 重建，
+// 所以直接绑它自己；卡片是每次重建的，仍然走 #main 的委托。
+$('shuffleBtn').onclick=()=>swapBatch();
 $('main').onclick=e=>{
-  if(e.target.closest('#shuffleBtn')){swapBatch();return;}
   const cp=e.target.closest('.card-play');
   if(cp){e.stopPropagation();inlinePlay(A[+cp.closest('.card').dataset.i],cp.parentElement);return;}
   const c=e.target.closest('.card');if(c)openPlayer(A[+c.dataset.i]);
@@ -1334,13 +1353,32 @@ function fitSideCards(){
   const body=$('player').querySelector('.pbody>.panel')||$('player').querySelector('.pbody');
   if(!body||!$('player').classList.contains('open'))return;
   const pin=$('player').querySelector('.pinner');
-  const b=body.getBoundingClientRect(),p=pin.getBoundingClientRect();
-  if(!b.height)return;
+  /* 必须用 offsetTop / offsetHeight 这类 CSS 像素，不能用 getBoundingClientRect：
+     页面为了跨屏一致加了 :root{zoom}（fitToViewport），rect 返回的是已经乘过 zoom 的
+     设备像素。拿它去写 --card-h，在 1.32 倍缩放下会把高度放大 32%，两侧卡片直接
+     溢出到屏幕外——1904x1020 下实测底部多出 279px。 */
+  if(!body.offsetHeight)return;
   const pad=parseFloat(getComputedStyle(pin).paddingTop)||0;
-  const off=Math.max(0,Math.round(b.top-p.top-pad)),h=Math.round(b.height);
+  const off=Math.max(0,Math.round(body.offsetTop-pin.offsetTop-pad)),h=Math.round(body.offsetHeight);
   pin.style.setProperty('--card-off',off+'px');
   pin.style.setProperty('--card-h',h+'px');
   document.documentElement.style.setProperty('--card-h',h+'px');
+  fitCardWidth(pin,body);
+}
+
+/* 侧卡宽度：让「歌词 : 侧卡 = 1.618 : 1」。
+   可用宽 = 内容宽 − 左右两条列间距 − 曲目列与歌词之间的那条间距 − 曲目列宽，
+   再由 2C + 1.618C = 可用宽 解出 C = 可用宽 ÷ 3.618。
+   曲目列宽会被曲目框的宽度反过来影响（中间那一列的 1fr 变宽，曲目列就顶到 258 上限），
+   所以量两遍：第一遍先定个大概，改完宽度重新量一次再写死，第二遍就是收敛后的值。 */
+function fitCardWidth(pin,tracks){
+  const cs=getComputedStyle(pin);
+  const gap=parseFloat(cs.columnGap)||16;
+  const inner=pin.clientWidth-(parseFloat(cs.paddingLeft)||0)-(parseFloat(cs.paddingRight)||0);
+  for(let i=0;i<2;i++){
+    const avail=inner-3*gap-tracks.offsetWidth;
+    pin.style.setProperty('--card-w',Math.max(172,Math.round(avail/3.618))+'px');
+  }
 }
 addEventListener('resize',()=>{clearTimeout(fitSideCards._t);fitSideCards._t=setTimeout(fitSideCards,100);});
 /* 两侧文字栏：关于艺人（左）与关于专辑（右）。
@@ -1364,37 +1402,48 @@ function markLongTitles(){
     }
   });
 }
+/* 源数据里的简介多是按 ~40 字硬回车折断的纯文本（行尾常常没有标点）。
+   照原样按 \n 分段，缩进就会停在半句中间、一段一个锯齿。这里先把软换行接回去，
+   只把空行当作真正的分段，再按句末标点切段。 */
+function paragraphsOf(text){
+  const out=[];
+  text.split(/\n\s*\n/).forEach(raw=>{
+    const block=raw.replace(/[ \t\u3000]*\n[ \t\u3000]*/g,'').trim();
+    if(!block)return;
+    if(block.length<=110){out.push(block);return;}
+    const sents=block.match(/[^。！？!?；;]+[。！？!?；;]?/g)||[block];
+    let cur='';
+    sents.forEach(s=>{
+      if(cur&&cur.length+s.length>110){out.push(cur.trim());cur='';}
+      cur+=s;
+    });
+    if(cur.trim())out.push(cur.trim());
+  });
+  return out;
+}
 function fillAlbumInfo(al){
   const ai=(al.artistInfo||'').trim(), intro=(al.intro||'').trim();
-  const left=ai||intro, right=intro||ai;
+  let left=ai||intro, right=intro||ai;
+  // intro 以 artistInfo 开头（很常见）：右栏只贴"多出来的那截专辑笔记"。
+  // 但 artistInfo 往往在句子中间被截断（"…四川音乐学院民族声乐"｜"学系毕业，…"），
+  // 直接切会让左栏留半句、右栏从半句起头——把切口往后挪到整句结束处再切。
+  if(intro&&ai&&intro.startsWith(ai)){
+    const rest=intro.slice(ai.length);
+    const m=rest.match(/[。！？!?；;]/)||rest.match(/\n/);
+    const end=m?ai.length+m.index+1:intro.length;
+    left=intro.slice(0,end).trim();
+    right=intro.slice(end).trim();
+  }
   const setCol=(el,text,empty)=>{
     if(text){
-      // 先按原文换行分段；单段过长时再按句末标点切成每 2-3 句一段，避免整段看着累
-      const paragraphs=[];
-      text.split(/\n+/).forEach(block=>{
-        block=block.trim();
-        if(!block)return;
-        if(block.length<=110){paragraphs.push(block);return;}
-        const sents=block.match(/[^。！？!?；;]+[。！？!?；;]?/g)||[block];
-        let cur='';
-        sents.forEach(s=>{
-          if(cur&&cur.length+s.length>110){paragraphs.push(cur.trim());cur='';}
-          cur+=s;
-        });
-        if(cur.trim())paragraphs.push(cur.trim());
-      });
-      el.replaceChildren(...paragraphs.map(s=>{const p=document.createElement('p');p.textContent=s;return p;}));
+      el.replaceChildren(...paragraphsOf(text).map(s=>{const p=document.createElement('p');p.textContent=s;return p;}));
     }else{
       el.textContent=empty;
     }
     el.classList.toggle('muted',!text);
   };
   setCol($('pArtistInfo'),left,'这张唱片没有留下艺人资料。');
-  // intro 以 artistInfo 开头（很常见）：右栏只贴"多出来的那截专辑笔记"，不为同一段话再说一遍
-  if(intro&&ai&&intro.startsWith(ai)){
-    const tail=intro.slice(ai.length).replace(/^[\s，。、;；:：\-—]+/,'').trim();
-    setCol($('pAlbumInfo'),tail,'暂时没有专辑笔记。');
-  }else if(right&&left&&right===left)setCol($('pAlbumInfo'),'暂时没有专辑笔记。','');
+  if(right&&left&&right===left)setCol($('pAlbumInfo'),'暂时没有专辑笔记。','');
   else setCol($('pAlbumInfo'),right,'暂时没有专辑笔记。');
 }
 /* 返回首页：先播退场动画再卸载，避免"啪一下就没了"。
