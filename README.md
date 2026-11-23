@@ -1,4 +1,4 @@
-<div align="center"><br><br>
+﻿<div align="center"><br><br>
 <img src="docs/assets/banner-xicheng.png" alt="Sirius · 無損音樂庫" width="720" />
 <br><br>
 
@@ -197,5 +197,7 @@ python 音乐库.py 歌词    # 採歌詞而離線整之
 <br>
 <sub>紙承墨，墨載意，意馭器</sub>
 <br><sub>西城閒人 · 識</sub>
+<br><sub>印篆取崇羲篆體（王心怡、季旭昇），CC BY-ND 3.0 TW</sub>
 <br><sub>本專案尚未附許可文件，使用與再發布以後續許可聲明為準 · © 2026 · LEE20260315</sub>
 </div>
+
