@@ -1,174 +1,201 @@
-# 音乐库
+<div align="center"><br><br>
+<img src="docs/assets/banner-xicheng.png" alt="Sirius · 無損音樂庫" width="720" />
+<br><br>
 
-本机、局域网和临时隧道三用的个人无损音乐库播放器：纯前端单文件页面加一个 Node 静态服务，无构建、无依赖、无数据库。
+# Sirius · 無損音樂庫
+<sub>Personal Lossless Music Library — Local · LAN · Temporary Tunnel</sub>
+<br>
+<sub>― 把每一張唱片，慢慢聽完整 ―</sub>
+<br>
 
-## 它长什么样
+[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A518-flat-square?color=141414)](https://nodejs.org/)
+[![Python](https://img.shields.io/badge/Python-3-flat-square?color=141414)](https://www.python.org/)
+[![Frontend](https://img.shields.io/badge/Frontend-Vanilla%20JS-flat-square?color=141414)](#法)
+[![Database](https://img.shields.io/badge/Database-None-flat-square?color=9C2A2A)](#法)
+[![Deploy](https://img.shields.io/badge/Scope-Local%20%2F%20LAN%20%2F%20Tunnel-flat-square?color=141414)](#法)
 
-首页以封面墙浏览专辑，提供「全部、按艺人、按类型、按年代、按音质」筛选；下方有音乐库足迹时间轴。右侧书签式「换一批」可以换一组推荐专辑。播放页以黑胶旋转作为视觉中心，页面底部保留迷你播放条。
+<br>
+<sub>[序](#序) · [覽](#覽) · [器](#器) · [法](#法) · [護](#護)</sub>
+<br><br>
+<img src="docs/assets/seal-xicheng.svg" alt="西城閒人" width="56" />
+<br></div>
 
-## 目录里都有什么
+---
 
-| 路径 | 内容 | 进 Git | 缺少时 |
-|---|---|---:|---|
-| `音乐库.html` | 单文件播放器，样式与脚本内嵌 | 是 | 没有页面入口 |
-| `music-server.js` | 本机静态服务，8099 端口，支持 Range/206、gzip、ETag | 是 | Node 服务启动不了 |
-| `watchdog.js` | 每 30 秒探测服务，连续失败 2 次后重启 | 是 | 异常退出后不会自动拉起 |
-| `tunnel.js` | Cloudflare 临时隧道守护进程，地址写入本地文件 | 是 | 没有隧道入口 |
-| `start-all.js` | detached fork 启动服务和 watchdog 后退出 | 是 | 一键启动流程不可用 |
-| `启动器/*.vbs` | Windows 双击启动器：启动音乐库服务器 / 启动隧道 / 启动全部 | 是 | 仍可用命令行启动 |
-| `音乐库.py` | Python 维护工具统一入口 | 是 | 无法使用命令行维护操作 |
-| `tools/*.py` | 导入、拆轨、校准、检查、歌词功能模块 | 是 | 对应维护子命令不可用 |
-| `_备份/` | `data.js` / `durations.js` 的历史备份、校准原值与整理报告 | 否 | 改坏了没有回滚点，但不影响使用 |
-| `data.js` | 专辑与曲目元数据 | 否 | 没有专辑列表和足迹数据 |
-| `durations.js` | 曲目真实时长与播放偏移修正表 | 否 | 缺少校准时长信息 |
-| `_covers/` | 专辑封面文件 | 否 | 封面墙缺少本地封面 |
-| `_lyrics/` | 按专辑下标加载的歌词分片 | 否 | 没有随库提供的歌词分片 |
-| `无损/` | 无损音频文件及专辑目录 | 否 | 没有可播放的无损音源 |
-| `库维护须知.md` | 数据规则、维护流程与故障记录 | 是 | 缺少维护说明 |
+## 序 <a id="序"></a>
 
-**公共仓库不包含数据。** `无损/`、`_covers/`、`_lyrics/`、`data.js`、`durations.js`、`_备份/`、`_下载/`、`_logs/`、`_隧道地址.txt` 全部被 `.gitignore` 排除。clone 下来只有程序，不含 1811 张专辑、21216 首曲目及音频；数据文件和音乐目录要自己准备。
+本專案是一套個人無損音樂庫播放器：**單文件前端頁面** 加 **一個 Node 靜態服務**，無構建、無依賴、無資料庫。
 
-根目录只留必需的：`音乐库.html` + 四个 Node 脚本（`music-server.js`、`watchdog.js`、`tunnel.js`、`start-all.js`）+ `音乐库.py` + 两份文档（`README.md`、`库维护须知.md`）+ 生成的 `data.js`、`durations.js` + `_隧道地址.txt`，再加上 `tools/`、`启动器/` 与五个生成物目录（`_covers/`、`_lyrics/`、`_备份/`、`_logs/`、`_下载/`）和数据目录 `无损/`。备份不进根目录。
+本地收藏的 FLAC 等無損唱片整理成封面牆，可按藝人、類型、年代、音質篩選與逐曲搜尋；點入專輯是以黑膠旋轉為視覺中心的播放頁，附曲目表、藝人與專輯筆記、歌詞與底部迷你播放條。同一套程式可在本機直聽、區域網路分享，亦可經臨時隧道對外開放聆聽。
 
-## `音乐库.html` 依赖哪些文件
+播放鏈路不經資料庫：頁面樣式、腳本、圖標、字體全部內嵌，除歌詞站 `lrclib.net` 外不依賴任何 CDN 或外部服務。
 
-**硬依赖只有两个：`data.js` 和 `无损/`。** 缺任何一个页面都不成立。其余全是加分项，缺了只降级不罢工。
+---
 
-| 依赖 | 必需 | 页面怎么取 | 缺了会怎样 |
-|---|---:|---|---|
-| `data.js` | **是** | `<script src>`，`音乐库.html:781` | 首页空白，顶部提示数据缺失，并再 `fetch` 重试一次 |
-| `无损/<rel>/<p>` | **是** | `audUrl()`，`音乐库.html:905` | 封面墙还在，但每一首都播不出来 |
-| `durations.js` | 否 | `<script src>`，`音乐库.html:785` | 改用音频头里的时长；头部写错的那些曲目拖进度会直接跳到结尾 |
-| `_covers/<coverFile>` | 否 | `imgUrl()`，`音乐库.html:895` | 退回专辑目录里的 `folder.jpg` 等原图；那也没有就显示首字占位块 |
-| `_lyrics/a<下标>.js` | 否 | `ensureAlbumLyrics()` 动态插 `<script>`，`音乐库.html:1606`（实际路径在 `1611`） | 该专辑退回联网搜 lrclib；搜不到就只显示纯曲目 |
-| `music-server.js` 的 `/api/*` | 否 | 只有入库流程用 | 双击 `file://` 打开仍能听，只是不能入库 |
+## 覽 <a id="覽"></a>
 
-全部用相对路径，所以页面必须在项目根目录打开（`http://127.0.0.1:8099/` 或直接双击 `音乐库.html`）。
+**封面牆** —— 頂部為篩選與搜尋，主體是專輯封面牆；右側書籤式「換一批」更換一組推薦專輯，側欄為庫的足跡時間軸。
 
-联网只有一个外部域名：本地没有歌词时去 `https://lrclib.net/api/search` 找（`音乐库.html:1572`）。样式、脚本、图标、字体全部内嵌，没有 CDN、没有构建产物。
+![封面牆](docs/assets/screenshot-home.png)
 
-本机服务提供的接口：`/api/ping`、`/api/import/scan`、`POST /api/import/commit`、`POST /api/import/probe`、`POST /api/import/folder`、`POST /api/browse`。播放链路不经过它们。
+<sub>※ 首頁：全部 / 按藝人 / 按類型 / 按年代 / 按音質 篩選，搜尋藝人、專輯或曲目。</sub>
 
-## 跑起来
+**播放頁** —— 黑膠與唱臂為視覺中心，曲目表居中，左右兩欄為藝人介紹與專輯筆記；離開唱片頁後，底部迷你條仍可繼續控制。
 
-Windows 本机双击 `启动器\启动音乐库服务器.vbs`（想连隧道一起起就双击 `启动器\启动全部.vbs`），或在项目目录运行：
+![播放頁](docs/assets/screenshot-player.png)
 
-    node music-server.js
+<sub>※ 播放頁：黑膠旋轉、順序 / 單曲循環 / 亂序、淡入淡出開關、歌詞區。</sub>
 
-浏览器打开 `http://127.0.0.1:8099/`。也可以双击 `音乐库.html` 以 `file://` 打开，功能受限且不能入库；入库必须启动本机服务。
+---
 
-## 自己攒一个库
+## 器 <a id="器"></a>
 
-`data.js` 是 JavaScript 赋值，首行为 `window.LIB_DATA=`，末尾以分号结束。schema：
+<sub>※ 公共倉庫僅含程式與文件；音訊、封面、歌詞與資料檔均被 `.gitignore` 排除，clone 下來只有程式。</sub>
 
-    {albums:[{artist,album,year,quality,disc,era,genre,cover,coverFile,intro,artistInfo,rel,tracks:[{n,p}]}],updates:[{date,title,text}],generated}
+| 編號 | 路徑 | 內容 | 進 Git |
+|---|---|---|:---:|
+| 〇一 | `音乐库.html` | 單文件播放器，樣式與腳本內嵌 | 是 |
+| 〇二 | `music-server.js` | 本機靜態服務，8099 埠，支援 Range/206、gzip、ETag | 是 |
+| 〇三 | `watchdog.js` | 每 30 秒探測服務，連續失敗 2 次後自動拉起 | 是 |
+| 〇四 | `tunnel.js` | Cloudflare 臨時隧道守護進程，地址寫入本地檔案 | 是 |
+| 〇五 | `start-all.js` | detached 子進程拉起服務與 watchdog 後退出 | 是 |
+| 〇六 | `启动器/*.vbs` | Windows 雙擊啟動器：服務 / 隧道 / 全部 | 是 |
+| 〇七 | `音乐库.py` | 維護工具統一入口 | 是 |
+| 〇八 | `tools/*.py` | 導入、拆軌、校準、檢查、歌詞模組 | 是 |
+| 〇九 | `库维护须知.md` | 資料規則、維護流程與故障記錄 | 是 |
+| — | `data.js` | 專輯與曲目中繼資料 | 否 |
+| — | `durations.js` | 曲目真實時長與播放偏移修正表 | 否 |
+| — | `_covers/` | 專輯封面縮略圖 | 否 |
+| — | `_lyrics/` | 按專輯下標命名的歌詞分片 | 否 |
+| — | `无损/` | 無損音訊檔案及專輯目錄 | 否 |
+| — | `_备份/` · `_logs/` · `_下载/` | 歷史備份、訪問與守護日誌、外部程式 | 否 |
 
-所有字段都是字符串（包括 `year`，空串表示未标年）。`rel` 是从项目根算起的专辑目录（以 `无损/` 开头），`tracks[].p` 是该目录内的文件名。两张专辑示例（对应音频文件需真实存在）：
+---
 
-    window.LIB_DATA={albums:[
-      {artist:"甲",album:"第一张",year:"2020",quality:"16bit / 44.1kHz",disc:"",era:"2020年代",genre:"流行",cover:"",coverFile:"",intro:"",artistInfo:"",rel:"无损/甲/(2020) 第一张 [16-44.1]",tracks:[{n:"开场",p:"01 - 开场.flac"}]},
-      {artist:"乙",album:"第二张",year:"",quality:"24bit / 96kHz",disc:"",era:"未标年",genre:"古典",cover:"",coverFile:"",intro:"",artistInfo:"",rel:"无损/乙/第二张 [24-96]",tracks:[{n:"主题",p:"01 - 主题.flac"}]}
-    ],updates:[],generated:"2026-01-01"};
+## 法 <a id="法"></a>
 
-示例只说明结构，不会生成音频文件。
+### 前置依賴
 
-## 目录命名规矩
+| 依 | 所需 | 取之之法 |
+|---|---|---|
+| Node.js | 服務與頁面播放，≥ 18 | 官網安裝 LTS 版本 |
+| Python 3 | 維護工具（可選，僅入庫 / 拆軌 / 校準時需要） | 官網安裝 |
 
-专辑目录采用 `(年份) 专辑名 [位深-采样率] CD1`，例如 `(2001) 专辑名 [24-96] CD1`。解析不到年份就留空显示「未标年」，不要猜测。
+### 啟動
 
-## 已知限制
+```powershell
+# Windows：雙擊 启动器\启动音乐库服务器.vbs
+# 或在專案目錄命令行執行
+node music-server.js
+```
 
-- `_lyrics/a<下标>.js` 按数组下标命名，只允许向 `albums` 末尾追加；中间删除或重排会令歌词错位，删除时须重编号全部歌词分片。
-- `durations.js` 的 `LIB_DUR` 是曲目时长表，`LIB_OFF` 是播放偏移表，`LIB_BAD` 标记已知异常时长项；目录变更要同步维护对应键。
-- 入库只能在本机进行：服务只允许 loopback 请求写盘。远程访问只用于听音乐。
-- Cloudflare 临时隧道网址每次重启都会变化，当前地址查看本机地址文件。
-- 整轨音频需先拆轨；入库按一个音频文件对应一首曲目处理。
+瀏覽器打開 `http://127.0.0.1:8099/` 即可。想連同隧道一起啟動，雙擊 `启动器\启动全部.vbs`。
 
-## 许可
+亦可直接雙擊 `音乐库.html` 以 `file://` 打開聆聽；**入庫操作必須經本機服務**，純靜態打開只能聽。
 
-本项目未附许可文件；使用与再发布权限以仓库后续明确添加的许可声明为准。
-## 功能与使用边界
+### 維護命令
 
-### 浏览与筛选
+統一入口為 `python 音乐库.py <子命令>`：
 
-首页封面墙用于按专辑浏览。
-筛选可按艺人聚合查看。
-也可以按类型浏览。
-年代筛选用于查看不同年代的专辑。
-音质筛选用于区分不同规格。
-「全部」会返回完整专辑集合。
-足迹时间轴记录库的变化。
-「换一批」入口提供另一组专辑浏览起点。
+```powershell
+python 音乐库.py 导入    # 掃描目錄、查重並提交入庫
+python 音乐库.py 拆轨    # 整軌音頻按 CUE / 軌距拆分逐曲
+python 音乐库.py 校准    # 校準曲目時長與偏移，只動音訊頭部欄位
+python 音乐库.py 检查    # 資料與檔案一致性自檢
+python 音乐库.py 歌词    # 抓取並離線整理歌詞分片
+```
 
-### 播放
+<sub>※ 改資料前先讀 `库维护须知.md`，並先備份 `data.js`；維護操作只在本機執行。</sub>
 
-选择专辑后可查看曲目并开始播放。
-播放过程中可使用迷你播放条继续控制。
-播放页以黑胶旋转作为视觉状态呈现。
-浏览器是否能播放取决于浏览器支持的音频格式。
-本地文件缺失时，对应曲目自然无法播放。
+### 資料結構
 
-### 服务
+`data.js` 為 JavaScript 賦值，首行 `window.LIB_DATA=`，末尾以分號結束：
 
-Node 服务提供页面与本地文件的静态访问。
-音频 Range 请求用于拖动进度和分段读取。
-服务对可压缩文本资源提供 gzip。
-ETag 可帮助客户端校验资源版本。
-watchdog 负责服务进程意外退出后的恢复。
-start-all.js 用 detached 子进程拉起服务与 watchdog。
-启动脚本为 Windows 使用；其他环境可直接调用 Node。
+```text
+{
+  albums: [{
+    artist, album, year, quality, disc, era, genre,
+    cover, coverFile, intro, artistInfo, rel,
+    tracks: [{ n, p }]
+  }],
+  updates: [{ date, title, text }],
+  generated
+}
+```
 
-## 数据字段速查
+所有欄位均為字串（`year` 無法確認時留空，頁面顯示「未標年」，不作猜測）。`rel` 是從專案根算起的專輯目錄（以 `无损/` 開頭），`tracks[].p` 是該目錄內的音訊檔名。
 
-`albums` 是专辑数组，顺序同时影响歌词分片索引。
-`artist` 保存专辑艺人显示名。
-`album` 保存专辑标题。
-`year` 保存可确认的发行年份；无法确认时留空。
-`quality` 描述音频规格。
-`disc` 可记录分碟信息。
-`era` 保存年代筛选使用的分类。
-`genre` 保存类型筛选使用的分类。
-`cover` 与 `coverFile` 保存封面相关信息。
-`intro` 保存专辑简介。
-`artistInfo` 保存艺人介绍。
-`rel` 是相对 `无损/` 的专辑目录。
-`tracks` 是专辑曲目数组。
-`tracks[].n` 是曲目名称。
-`tracks[].p` 是实际音频文件名。
-`updates` 保存足迹时间轴条目。
-`updates[].date` 是日期。
-`updates[].title` 是短标题。
-`updates[].text` 是条目正文。
-`generated` 记录数据生成信息。
+### 目錄命名規矩
 
-## 维护命令
+專輯目錄統一採用 `(年份) 專輯名 [位深-採樣率] CD1`，例如 `(2001) 專輯名 [24-96] CD1`；解析不到年份就留空。
 
-统一入口为 `python 音乐库.py <子命令>`。
-子命令包括 `导入`、`拆轨`、`校准`、`检查`、`歌词`。
-先阅读 `库维护须知.md` 再改数据。
-修改数据前先准备备份。
-维护操作只在本机执行。
+### 頁面依賴
 
-## 克隆后的准备
+**硬依賴只有兩個：`data.js` 與 `无损/`**，缺任何一個頁面都不成立；其餘皆為加分項，缺了只降級不罷工。
 
-克隆代码不会下载或生成私人音乐数据。
-不要期待仓库中包含 `data.js`。
-不要期待仓库中包含 `durations.js`。
-不要期待仓库中包含音频或封面。
-需要按照数据结构准备专辑数据。
-音频目录应按专辑路径组织。
-检查每个曲目文件名与数据中的 `p` 对应。
-每个专辑的 `rel` 应相对 `无损/`。
-封面与歌词资源需按页面读取规则自行准备。
-确认后启动本机服务浏览页面。
+| 依賴 | 必需 | 缺了會怎樣 |
+|---|:---:|---|
+| `data.js` | 是 | 首頁空白，頂部提示資料缺失 |
+| `无损/<rel>/<p>` | 是 | 封面牆仍在，但每一首都播不出來 |
+| `durations.js` | 否 | 改用音訊頭裡的時長；頭部寫錯的曲目拖進度會跳到結尾 |
+| `_covers/<coverFile>` | 否 | 退回專輯目錄內原圖；再沒有就顯示首字佔位塊 |
+| `_lyrics/a<下標>.js` | 否 | 該專輯退回聯網搜尋 lrclib；搜不到則只顯示純曲目 |
+| `/api/*` 介面 | 否 | 僅入庫流程使用；雙擊打開仍能聽，只是不能入庫 |
 
-## 维护建议
+本機服務提供的介面：`/api/ping`、`/api/import/scan`、`POST /api/import/commit`、`POST /api/import/probe`、`POST /api/import/folder`、`POST /api/browse`。播放鏈路不經過它們。
 
-只向专辑数组末尾追加新专辑。
-不要按艺人和专辑名直接批量删除同名条目。
-目录改名时同步维护时长路径键。
-整轨专辑先拆成逐曲文件再入库。
-年份没有可靠依据时保持为空。
-不要把隧道临时地址写入 README。
-不要将私人数据文件加入公共仓库。
-更多已知问题见 `库维护须知.md`。
+---
+
+## 護 <a id="護"></a>
+
+<details>
+<summary>克隆下來為何沒有專輯、封面與音樂？</summary>
+
+<br>公共倉庫不包含私人資料。`无损/`、`_covers/`、`_lyrics/`、`data.js`、`durations.js`、`_备份/`、`_下载/`、`_logs/` 與隧道地址檔全部被 `.gitignore` 排除。需依照上文資料結構自行準備專輯中繼資料，並按 `rel` 與曲目檔名組織音訊目錄。
+</details>
+
+<details>
+<summary>為什麼入庫只能在本機進行？</summary>
+
+<br>服務只允許 loopback 請求寫盤；區域網路與隧道訪問僅用於聆聽，不開放遠端入庫、改資料或寫檔。
+</details>
+
+<details>
+<summary>歌詞分片為何不允許在中間刪除或重排專輯？</summary>
+
+<br>`_lyrics/a<專輯下標>.js` 按陣列下標命名。一旦在中間插入、刪除或重排，後續分片會全部指向錯誤的專輯，歌詞錯位。新專輯只能追加到 `albums` 陣列末尾；刪除專輯後須重編全部歌詞分片。
+</details>
+
+<details>
+<summary>隧道網址為何每次重啟都變？</summary>
+
+<br>使用的是 Cloudflare 臨時隧道，地址隨進程重啟更換；當前地址查看本機地址檔即可，勿將臨時地址寫入 README 或提交進倉庫。
+</details>
+
+<details>
+<summary>整軌 WAV / 整張專輯如何入庫？</summary>
+
+<br>整軌音頻須先拆成逐曲檔案，入庫按一個音訊檔對應一首曲目處理；可使用 `python 音乐库.py 拆轨`。
+</details>
+
+<details>
+<summary>某些曲目為何播不出來？</summary>
+
+<br>能否播放取決於瀏覽器支援的音訊格式，建議使用 Chrome / Edge；本地檔案缺失或損壞時，對應曲目自然無法播放，可先跑 `python 音乐库.py 检查` 核對檔案一致性。
+</details>
+
+<details>
+<summary>`durations.js` 為何不建議手改？</summary>
+
+<br>`LIB_DUR` 為曲目時長表，`LIB_OFF` 為播放偏移表，`LIB_BAD` 標記已知異常時長項，由 `校准` 子命令生成與維護；目錄變更須同步對應鍵，改前保留 `_备份/` 內的原值回滾點。
+</details>
+
+---
+
+<div align="center">
+<img src="docs/assets/seal-xicheng.svg" alt="西城閒人" width="48" />
+<br>
+<sub>紙承墨，墨載意，意馭器</sub>
+<br><sub>西城閒人 · 識</sub>
+<br><sub>本專案尚未附許可文件，使用與再發布以後續許可聲明為準 · © 2026 · LEE20260315</sub>
+</div>
