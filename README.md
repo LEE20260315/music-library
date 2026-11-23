@@ -1,4 +1,4 @@
-﻿<div align="center"><br><br>
+<div align="center"><br><br>
 <img src="docs/assets/banner-xicheng.png" alt="Sirius · 無損音樂庫" width="720" />
 <br><br>
 
@@ -157,7 +157,13 @@ python 音乐库.py 歌词    # 採歌詞而離線整之
 <details>
 <summary>入庫何以止於本機？</summary>
 
-<br>服務惟許 loopback 之請寫盤；區域網路與隧道之客，止於聽，不與寫——遠端不可入庫、不可改資料、不可動檔案。
+<br>服務惟許 loopback 之請寫盤；區域網路與隧道之客，止於聽，不與寫——遠端不可入庫、不可改資料、不可動檔案。非 GET 之請，其 `Content-Type` 必為 `application/json`，`Origin` 亦須屬本機或 `file://`；蓋跨站表單乃「簡單請求」，瀏覽器不先預檢而徑發，故非卡此不可。
+</details>
+
+<details>
+<summary>源碼、日誌、備份，何以不可下？</summary>
+
+<br>所供者，有定冊焉：`音乐库.html`、`data.js`、`durations.js` 三檔，與 `无损/`、`_covers/`、`_lyrics/` 三目，餘皆不予。請至，先按其名，復以真實路徑核之（Windows 之目錄聯接亦不能出此），不合者一例答以 404——非 403 也，403 猶告以有物在此。故隧道雖開，所洩止於聲與圖，不及代碼、日誌、備份。
 </details>
 
 <details>

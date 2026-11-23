@@ -13,6 +13,7 @@
  */
 
 const { spawn } = require('child_process');
+const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
@@ -141,4 +142,38 @@ function start() {
 process.on('SIGINT', () => { stopping = true; releasePid(); if (child) child.kill(); process.exit(0); });
 process.on('SIGTERM', () => { stopping = true; releasePid(); if (child) child.kill(); process.exit(0); });
 
-start();
+/* 先确认 8099 上跑的是音乐库，再把端口挂到公网。
+   以前不看就挂：万一 8099 被别的程序占了（或者服务自己还没起来），
+   公网网址指向的就是那个东西——可能是一份源码目录、一个调试面板。 */
+const WAIT = 15, TRIES = 20;
+function waitReady(tries) {
+  const req = http.request(
+    { host: '127.0.0.1', port: 8099, path: '/api/ping', method: 'GET', timeout: 5000 },
+    res => {
+      let body = '';
+      res.on('data', c => { body += c; if (body.length > 8192) req.destroy(); });
+      res.on('end', () => {
+        let j = null;
+        try { j = JSON.parse(body); } catch (e) {}
+        if (res.statusCode === 200 && j && j.ok === true && typeof j.albums === 'number') {
+          log('8099 是音乐库（' + j.albums + ' 张专辑），开始建隧道');
+          return start();
+        }
+        log('8099 上不是音乐库服务（HTTP ' + res.statusCode + '：' + body.slice(0, 80) + '），先不建隧道');
+        retry();
+      });
+    }
+  );
+  req.on('timeout', () => req.destroy());
+  req.on('error', e => { log('音乐库服务还没就绪（' + e.message + '），' + WAIT + ' 秒后再试'); retry(); });
+  req.end();
+  function retry() {
+    if (tries <= 0) {
+      log('等了太久，这次不建隧道。先确认 music-server.js 在跑（看门狗会自己拉）。');
+      return process.exit(1);
+    }
+    setTimeout(() => waitReady(tries - 1), WAIT * 1000);
+  }
+}
+
+waitReady(TRIES);

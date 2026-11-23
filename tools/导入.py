@@ -146,6 +146,9 @@ def target_dirname(a):
             ((a['quality'].split(' / ')[1].replace('kHz', '')) if a['quality'] else '?') + ']')
 
 
+STAGE = os.path.join(ROOT, '_导入中')     # 复制中的暂存区，放在 无损/ 外面，扫描永远看不见
+
+
 def do_one(a, dry=False):
     """把一张专辑真正落进 无损/。返回 (rel, kind, 写入文件数, 说明)。"""
     rel = '无损/' + a['artist'] + '/' + target_dirname(a)
@@ -156,22 +159,38 @@ def do_one(a, dry=False):
                 a['tracks'], a['bytes'] * 0.6 / 1048576)
         if os.path.isdir(dest) and os.listdir(dest):
             return rel, 'skip', 0, '目标目录已有文件，跳过'
-        cq.split_one(a['dir'], artist=a['artist'], album=a['album'], year=a['year'])
+        created = not os.path.isdir(dest)
+        try:
+            cq.split_one(a['dir'], artist=a['artist'], album=a['album'], year=a['year'])
+        except BaseException:
+            # 拆到一半失败会留下半张专辑，而下一次导入看到「目录非空」就永远跳过它。
+            # 只清本次新建的目录；原本就存在的目录不碰。
+            if created:
+                shutil.rmtree(dest, ignore_errors=True)
+            raise
         n = len([x for x in listdir(dest) if os.path.splitext(x)[1].lower() == '.flac'])
         return rel, 'whole-disc', n, '拆出 %d 首' % n
-    # 多文件：复制 + 封面
+    # 多文件：先全部复制到暂存目录，齐了再改名过去（同卷 rename 是原子的）
     if dry:
         return rel, 'copy', a['tracks'], '将复制 %d 个文件（约 %.0f MB）' % (a['tracks'], a['bytes'] / 1048576)
     if os.path.isdir(dest) and os.listdir(dest):
         return rel, 'skip', 0, '目标目录已有文件，跳过'
-    os.makedirs(dest, exist_ok=True)
-    n = 0
-    for f in audio_files(a['dir']):
-        shutil.copy2(os.path.join(a['dir'], f), os.path.join(dest, f))
-        n += 1
-    cov = a['cover']
-    if cov:
-        shutil.copy2(os.path.join(a['dir'], cov), os.path.join(dest, 'folder.jpg'))
+    stage = os.path.join(STAGE, '%d-%s' % (os.getpid(), re.sub(r'[^\w\-]+', '_', a['album'])[:24]))
+    shutil.rmtree(stage, ignore_errors=True)
+    os.makedirs(stage, exist_ok=True)
+    try:
+        n = 0
+        for f in audio_files(a['dir']):
+            shutil.copy2(os.path.join(a['dir'], f), os.path.join(stage, f))
+            n += 1
+        cov = a['cover']
+        if cov:
+            shutil.copy2(os.path.join(a['dir'], cov), os.path.join(stage, 'folder.jpg'))
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        os.rename(stage, dest)
+    except BaseException:
+        shutil.rmtree(stage, ignore_errors=True)
+        raise
     return rel, 'copy', n, '复制 %d 个文件' % n
 
 

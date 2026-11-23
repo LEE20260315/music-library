@@ -1586,6 +1586,9 @@ function parseLrcText(s){
 function autoSearchLyrics(t,artist){
   if(t._lyrSearched)return;
   t._lyrSearched=true;
+  /* 这次请求是替哪一首发的。歌词站慢的时候用户早切走了，
+     回来直接写 #lyrics 就会把别人的歌词盖到当前这首上（还会串一首到下一首）。 */
+  const stillHere=()=>cur&&cur.tracks[curIdx]===t;
   const key='dsh_lyr_'+normLyric(artist)+'_'+normLyric(t.n);
   try{const c=localStorage.getItem(key);if(c){t.lyr=JSON.parse(c);renderLyrics(t.lyr);return;}}catch(e){}
   $('lyrics').innerHTML='<div class="lyr-empty">我找找看歌词在哪里…</div>';
@@ -1594,6 +1597,7 @@ function autoSearchLyrics(t,artist){
     if(r.status===429)throw new Error('rate');
     return r.json();
   }).then(res=>{
+    if(!stillHere())return;
     if(!Array.isArray(res))throw 0;
     const na=normLyric(artist),nt=normLyric(t.n);
     let best=null,bs=-1;
@@ -1614,7 +1618,10 @@ function autoSearchLyrics(t,artist){
       }
     }
     $('lyrics').innerHTML='<div class="lyr-empty">我找找看歌词在哪里…（这首暂时没有）</div>';
-  }).catch(err=>{$('lyrics').innerHTML='<div class="lyr-empty">'+(err&&err.message==='rate'?'歌词站休息一下，稍后再找找看':'我找找看歌词在哪里…（暂时没找到）')+'</div>';});
+  }).catch(err=>{
+    if(!stillHere())return;
+    $('lyrics').innerHTML='<div class="lyr-empty">'+(err&&err.message==='rate'?'歌词站休息一下，稍后再找找看':'我找找看歌词在哪里…（暂时没找到）')+'</div>';
+  });
 }
 /* ===== 离线歌词 =====
    全库歌词由「python 音乐库.py 歌词」抓成 _lyrics/a<专辑下标>.js，一个文件只装一张专辑：
@@ -1748,6 +1755,9 @@ const MOBILE=/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)||
   (matchMedia&&matchMedia('(pointer:coarse)').matches&&/Macintosh/.test(navigator.userAgent));
 const MAX_PRELOAD=(MOBILE?160:512)*1024*1024;
 let srcReady=false;
+/* 一次下载失败不该让这首永远播不了：srcPromise 留着失败状态的话，
+   下次点播放还是拿到同一个失败结果，「点播放键重试」这句提示就成了空话。 */
+function dropSrcPromise(){srcPromise=null;}
 
 function isHttp(){return location.protocol==='http:'||location.protocol==='https:';}
 
@@ -1827,14 +1837,27 @@ function startFetch(){
       if(seq!==srcSeq)return;
       showBuffering(e.loaded,e.lengthComputable?e.total:0);
     };
+    /* 超大文件不该先整首拉进内存再判断：响应头一到就有 Content-Length，
+       超过上限立刻放弃这次下载，改走浏览器的边下边播（省一次白下的整首）。 */
+    xhr.onreadystatechange=()=>{
+      if(xhr.readyState!==2||seq!==srcSeq||!xhr)return;
+      const len=+(xhr.getResponseHeader('Content-Length')||0);
+      if(len>MAX_PRELOAD){
+        try{xhr.abort();}catch(e){}
+        if(seq!==srcSeq)return;
+        srcXhr=null;srcPromise=null;
+        audio.src=url;audio.load();srcReady=true;
+        hideBuffering();armMetaWatchdog();resolve(true);
+      }
+    };
     xhr.onload=()=>{
       if(seq!==srcSeq)return;
-      srcXhr=null;
+      srcXhr=null;srcPromise=null;
       if(xhr.status!==200&&xhr.status!==206){
         return reject(new Error('HTTP '+xhr.status));
       }
       const b=xhr.response;
-      // 太大的文件别硬塞进内存，退回原来的边下边播
+      // 上面那道已经拦过；这里是拿不到 Content-Length 时的兜底
       if(!b||b.size>MAX_PRELOAD){
         audio.src=url;audio.load();srcReady=true;
         hideBuffering();armMetaWatchdog();return resolve(true);
@@ -1843,8 +1866,8 @@ function startFetch(){
       audio.src=blobUrl;audio.load();srcReady=true;
       hideBuffering();armMetaWatchdog();resolve(true);
     };
-    xhr.onerror=()=>{if(seq!==srcSeq)return;srcXhr=null;reject(new Error('网络错误'));};
-    xhr.onabort=()=>reject(new Error('abort'));
+    xhr.onerror=()=>{if(seq!==srcSeq)return;srcXhr=null;srcPromise=null;reject(new Error('网络错误'));};
+    xhr.onabort=()=>{srcPromise=null;reject(new Error('abort'));};
     xhr.send();
   });
   // 错误交给调用处处理，这里吞掉以免出现 unhandled rejection
@@ -1865,6 +1888,10 @@ function load(i,album=cur){
   // 乱序时手动点了某一首：把它从待放队列里摘掉，否则这一轮里还会再放一遍
   if(playMode==='shuffle')shuffleQueue=shuffleQueue.filter(k=>k!==curIdx);
   const t=cur.tracks[curIdx];const token=++playToken;pausing=false;
+  /* 换歌要把上一首停掉。新的一首要等整首下完才响（见 startFetch），
+     这中间如果旧歌还在放，听着像点了没反应，切到慢盘上尤其明显。 */
+  if(!audio.paused){try{audio.pause();}catch(e){}}
+  setVolumeFactor(1);syncPlaybackUI(false);
   nowLocked=false;
   suppressEnded=true;setTimeout(()=>{suppressEnded=false;},500);
   primeAudio(token);

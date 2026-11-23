@@ -79,9 +79,17 @@ function probe(cb) {
 }
 
 /* ---------- 找 8099 的占用者（有时端口被占着但进程已经僵了） ---------- */
+const SERVER_PID_FILE = path.join(LOG_DIR, 'server.pid');
+function ourServerPid() {
+  try { return parseInt(fs.readFileSync(SERVER_PID_FILE, 'utf8').trim(), 10) || 0; } catch (e) { return 0; }
+}
+
+/* 只收自己家的进程。done(blocked)：true 表示端口被陌生进程占着，别去重启。
+   以前这里不看身份，端口上有谁就 taskkill 谁——万一 8099 被别的程序先占了
+   （同事另一个 node 项目、某个调试工具），看门狗会替别人收尸，那是不该动的。 */
 function killPortHolder(done) {
   execFile('netstat', ['-ano'], { windowsHide: true }, (e, out) => {
-    if (e) return done();
+    if (e) return done(false);
     const pids = new Set();
     for (const line of String(out).split('\n')) {
       if (!/:8099\s/.test(line)) continue;
@@ -89,14 +97,22 @@ function killPortHolder(done) {
       const m = line.trim().match(/(\d+)\s*$/);
       if (m) pids.add(m[1]);
     }
-    if (!pids.size) return done();
-    let left = pids.size;
+    if (!pids.size) return done(false);
+    const mine = ourServerPid();
+    let left = pids.size, blocked = false, killed = 0;
+    const step = () => { if (--left === 0) setTimeout(() => done(blocked), killed ? 1200 : 0); };
     for (const pid of pids) {
-      if (Number(pid) === process.pid) { if (--left === 0) done(); continue; }
-      log('端口 8099 被 PID ' + pid + ' 占着，先结束它');
-      execFile('taskkill', ['/F', '/PID', pid], { windowsHide: true }, () => {
-        if (--left === 0) setTimeout(done, 1200);
-      });
+      const n = Number(pid);
+      if (n === process.pid) { step(); continue; }
+      if (!mine || n !== mine) {
+        blocked = true;
+        log('端口 8099 被 PID ' + pid + ' 占着，但它不是本服务（server.pid 记的是 ' + (mine || '空') + '），不动它');
+        step();
+        continue;
+      }
+      killed++;
+      log('端口 8099 的 PID ' + pid + ' 是本服务留下的，结束它');
+      execFile('taskkill', ['/F', '/PID', pid], { windowsHide: true }, step);
     }
   });
 }
@@ -156,8 +172,15 @@ function tick() {
     fails = 0;
     startingSince = 0;
 
-    /* 两次都不通：先把可能僵住的占用者收掉，再重新拉 */
-    killPortHolder(() => startServer('探测连续失败'));
+    /* 两次都不通：先把可能僵住的占用者收掉，再重新拉。
+       端口被别人占着时不硬上——起也起不来，还会把日志刷满。 */
+    killPortHolder(blocked => {
+      if (blocked) {
+        log('8099 被非本服务的进程占着，本轮不重启（手动看一下是谁在用这个端口）');
+        return;
+      }
+      startServer('探测连续失败');
+    });
   });
 }
 

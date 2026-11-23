@@ -23,6 +23,7 @@ const zlib = require('zlib');
 const { URL } = require('url');
 
 const ROOT = __dirname;
+const REAL_ROOT = fs.realpathSync(ROOT);   // 库根的真实路径，junction 检查要用
 const BAK_DIR = path.join(ROOT, '_备份');   // data.js 的历史备份都放这儿，别堆在根目录
 const PORT = parseInt(process.argv[2] || process.env.PORT || '8099', 10);
 const INDEX = '音乐库.html';
@@ -95,6 +96,19 @@ function parseRange(header, size) {
   return { start, end: Math.min(end, size - 1) };
 }
 
+/* 哪些路径算「可以发出去的静态文件」。
+   以前这里只挡住「跳出 ROOT」，等于把整个项目目录都敞开了：源码、_logs/access.log、
+   _备份/ 里的 data.js 存档、启动器/*.vbs，写个文件名就能下载。而这个服务监听
+   0.0.0.0，一开 Cloudflare 隧道，拿到网址的人也能这样读。
+   现在只放行播放器真正用到的那几样，其余一律当作不存在。 */
+const PUBLIC_FILES = new Set([INDEX, 'data.js', 'durations.js']);
+const PUBLIC_DIRS = ['无损', '_covers', '_lyrics'];
+function isPublicRel(rel) {
+  const p = String(rel).split(path.sep).join('/');
+  if (PUBLIC_FILES.has(p)) return true;
+  return PUBLIC_DIRS.some(d => p === d || p.indexOf(d + '/') === 0);
+}
+
 function safeResolve(urlPath) {
   let rel;
   try {
@@ -103,10 +117,19 @@ function safeResolve(urlPath) {
     return null; // 非法转义
   }
   rel = rel.replace(/^\/+/, '');
+  if (!rel) return null;
   const full = path.resolve(ROOT, rel);
   const rootWithSep = ROOT.endsWith(path.sep) ? ROOT : ROOT + path.sep;
   if (full !== ROOT && !full.startsWith(rootWithSep)) return null; // 防目录穿越
-  return full;
+  if (!isPublicRel(path.relative(ROOT, full))) return null;
+  /* 目录联接（junction）能骗过上面那道纯字符串检查：无损/x 指向 C:\ 时，
+     前缀看着还在库内，实际读的是库外。按真实路径再判一次，
+     这样「无损/x → _logs」这种拐进敏感目录的联接也一起挡掉。 */
+  let real;
+  try { real = fs.realpathSync(full); } catch (e) { return null; }
+  const realRel = path.relative(REAL_ROOT, real);
+  if (!realRel || realRel.startsWith('..') || path.isAbsolute(realRel)) return null;
+  return isPublicRel(realRel) ? real : null;
 }
 
 /* ===== 入库 API =====
@@ -360,7 +383,11 @@ function commitImport(rels) {
     : names.slice(0, 2).join('、') + ' 等 ' + names.length + ' 张';
   addUpdate(data, day, '新专辑入库', brief + '，共 ' + trk + ' 首');
   const txt = 'window.LIB_DATA=' + JSON.stringify(data) + ';';
-  fs.writeFileSync(path.join(ROOT, 'data.js'), txt, 'utf8');
+  /* 先写临时文件再改名。以前直接覆盖 data.js：中途被杀或断电就留下半截 JSON，
+     整个库打不开（_备份/ 里虽还有备份，但恢复得手工做）。同卷改名是原子的。 */
+  const tmp = path.join(BAK_DIR, 'data.js.tmp-' + process.pid);
+  fs.writeFileSync(tmp, txt, 'utf8');
+  fs.renameSync(tmp, path.join(ROOT, 'data.js'));
   const u = data.updates.find(x => x.date === day);
   // 把写入的条目原样回给页面：页面据此就地更新，不必整页重载
   return { added: picked.length, tracks: trk, backup: '_备份/' + path.basename(bak), total: data.albums.length, update: u, albums: picked, skippedDup };
@@ -433,17 +460,31 @@ function readBody(req, res, cb) {
 
 /* 调 python 音乐库.py 导入：拆碟要跑几分钟，所以不设短超时；
    标准输出是一行 JSON，解析失败时把 stderr 原样还给页面，别让人对着空结果猜。 */
+let pyBusy = false;                       // 同一时间只许跑一个导入
+const PY_TIMEOUT = 2 * 60 * 60 * 1000;    // 拆整轨碟可能几十分钟，但不许无限挂着
+const PY_CAP = 64 * 1024;                 // 输出只留尾部，防止 python 刷屏把服务撑爆
 function runPy(args, done) {
+  if (pyBusy) return done({ code: -2, busy: true, err: '已经有一个导入在跑，等它结束再来' });
+  pyBusy = true;
   const { spawn } = require('child_process');
   const py = process.platform === 'win32' ? 'python' : 'python3';
   const child = spawn(py, [path.join(ROOT, '音乐库.py'), '导入'].concat(args), {
     cwd: ROOT,
     env: Object.assign({}, process.env, { PYTHONIOENCODING: 'utf-8' })
   });
-  let out = '', err = '';
-  child.stdout.on('data', d => { out += d.toString('utf8'); });
-  child.stderr.on('data', d => { err += d.toString('utf8'); });
-  child.on('error', e => done({ code: -1, err: '起不了 python：' + e.message }));
+  let out = '', err = '', finished = false;
+  const finish = r => {
+    if (finished) return;
+    finished = true; pyBusy = false; clearTimeout(timer);
+    done(r);
+  };
+  const timer = setTimeout(() => {
+    try { child.kill('SIGKILL'); } catch (e) {}
+    finish({ code: -3, err: '导入超过 ' + (PY_TIMEOUT / 3600000) + ' 小时，已中止' });
+  }, PY_TIMEOUT);
+  child.stdout.on('data', d => { out += d.toString('utf8'); if (out.length > PY_CAP) out = out.slice(-PY_CAP); });
+  child.stderr.on('data', d => { err += d.toString('utf8'); if (err.length > PY_CAP) err = err.slice(-PY_CAP); });
+  child.on('error', e => finish({ code: -1, err: '起不了 python：' + e.message }));
   child.on('close', code => {
     let json = null;
     for (const line of out.trim().split(/\r?\n/).reverse()) {
@@ -452,7 +493,7 @@ function runPy(args, done) {
       try { json = JSON.parse(s); } catch (e) {}
       if (json) break;
     }
-    done({ code, json: json || null, err: (err || out).slice(-1500) });
+    finish({ code, json: json || null, err: (err || out).slice(-1500) });
   });
 }
 
@@ -490,6 +531,18 @@ function handleApi(req, res, pathname) {
     if (!h) { res.writeHead(403); return res.end(); }
     res.writeHead(204, h);
     return res.end();
+  }
+
+  /* 写接口的两道门。
+     1) 只收 JSON：跨站的 <form enctype="text/plain"> 属于「简单请求」，浏览器不发预检
+        就直接 POST 过来了，卡住 Content-Type 才能挡住这种 CSRF。
+     2) 带了 Origin 就是跨源请求（本机页面自己发不会带）。只认 file:// 与本机页面，
+        跟 CORS 用同一份判断。 */
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    if (!/^application\/json\b/i.test(String(req.headers['content-type'] || '')))
+      return sendJson(req, res, 415, { error: '只接受 application/json' });
+    if (req.headers.origin && !corsHeaders(req))
+      return sendJson(req, res, 403, { error: '不接受来自其它网站的写入请求' });
   }
 
   const local = isLocal(req);
@@ -538,7 +591,7 @@ function handleApi(req, res, pathname) {
       if (!dir || typeof dir !== 'string') return sendJson(req, res, 400, { error: '没有给出目录' });
       if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory())
         return sendJson(req, res, 400, { error: '目录不存在：' + dir });
-      runPy(['--probe', dir], r => sendJson(req, res, r.code === 0 ? 200 : 500, annotateProbe(r.json) || { error: r.err }));
+      runPy(['--probe', dir], r => sendJson(req, res, r.code === 0 ? 200 : (r.busy ? 409 : 500), annotateProbe(r.json) || { error: r.err }));
     });
   }
   if (pathname === '/api/import/folder' && req.method === 'POST') {
@@ -552,7 +605,7 @@ function handleApi(req, res, pathname) {
       /* 页面上没勾的目录（多半是「库里已有」的那几张）根本不往下发，
          省掉一次复制或一次整轨拆分——拆完才发现重复再删，成本高得多。 */
       if (Array.isArray(o.skip) && o.skip.length) args.push('--skip', o.skip.join('\u0001'));
-      runPy(args, r => sendJson(req, res, r.code === 0 ? 200 : 500, r.json || { error: r.err }));
+      runPy(args, r => sendJson(req, res, r.code === 0 ? 200 : (r.busy ? 409 : 500), r.json || { error: r.err }));
     });
   }
   return sendJson(req, res, 404, { error: '未知接口' });
@@ -586,8 +639,9 @@ const server = http.createServer((req, res) => {
 
   const full = safeResolve(pathname);
   if (!full) {
-    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
-    return res.end('Forbidden');
+    // 不在白名单里的一律当作不存在：403 等于告诉对方「这里有东西，只是不给你」
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('404 Not Found');
   }
 
   fs.stat(full, (err, st) => {
@@ -685,6 +739,21 @@ const server = http.createServer((req, res) => {
 
 server.keepAliveTimeout = 65000;
 server.headersTimeout = 70000;
+
+/* 把自己的进程号写下来。看门狗只在「8099 的占用者确实是这个文件里记的进程」时
+   才动手结束它——不然一个陌生程序占了端口，会被连坐杀掉。 */
+const SERVER_PID_FILE = path.join(LOGDIR, 'server.pid');
+server.on('listening', () => {
+  try { fs.writeFileSync(SERVER_PID_FILE, String(process.pid), 'utf8'); } catch (e) {}
+});
+function dropPidFile() {
+  try {
+    if (parseInt(fs.readFileSync(SERVER_PID_FILE, 'utf8'), 10) === process.pid) fs.unlinkSync(SERVER_PID_FILE);
+  } catch (e) {}
+}
+process.on('exit', dropPidFile);
+process.on('SIGINT', () => { dropPidFile(); process.exit(0); });
+process.on('SIGTERM', () => { dropPidFile(); process.exit(0); });
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log('音乐库服务器已启动（原样发送，不做任何转码）');
