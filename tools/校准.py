@@ -36,7 +36,8 @@ except Exception:
 ROOT = Path(__file__).resolve().parent.parent   # 音乐库根目录
 LIB = ROOT / '无损'
 OUT_JS = ROOT / 'durations.js'
-BACKUP = ROOT / '.时长修正备份.json'             # 修正前的原始值，便于撤销
+BAK_DIR = ROOT / '_备份'                         # 备份统一收在这里，别散在库根目录
+BACKUP = BAK_DIR / '.时长修正备份.json'          # 修正前的原始值，便于撤销
 TAIL = 192 * 1024
 
 BS_TABLE = {1: 192, 2: 576, 3: 1152, 4: 2304, 5: 4608,
@@ -353,6 +354,8 @@ def main():
         print('找不到无损目录：', LIB)
         return
 
+    BAK_DIR.mkdir(parents=True, exist_ok=True)
+
     files = all_audio()
     print(f'共 {len(files)} 个音频文件，开始扫描…', flush=True)
 
@@ -408,7 +411,7 @@ def main():
           f'{len(set(broken))} 条损坏文件，解析失败 {len(bad)} 条', flush=True)
 
     if bad:
-        (ROOT / '.时长识别失败.txt').write_text(
+        (BAK_DIR / '.时长识别失败.txt').write_text(
             '\n'.join(f'{r}\t{e}' for r, e in sorted(bad)), encoding='utf-8')
 
     if not do_fix:
@@ -416,6 +419,7 @@ def main():
         return
 
     # ---- 就地修正头部时长 ----
+    BAK_DIR.mkdir(parents=True, exist_ok=True)
     backup = {}
     if BACKUP.exists():
         try:
@@ -453,7 +457,7 @@ def main():
         BACKUP.write_text(json.dumps(backup, ensure_ascii=False), encoding='utf-8')
         print(f'已修正 {fixed} 个文件的头部时长，原值备份在 {BACKUP.name}', flush=True)
     else:
-        plan_path = ROOT / '.时长预览.txt'
+        plan_path = BAK_DIR / '.时长预览.txt'
         plan_path.write_text('\n'.join(plan), encoding='utf-8')
         print(f'预览：将修正 {fixed} 个文件（未写入）。明细见 {plan_path.name}', flush=True)
 

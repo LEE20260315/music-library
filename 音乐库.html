@@ -2084,10 +2084,10 @@ document.addEventListener('keydown',e=>{
    所以点一次按钮选个目录，扫描、预览、写回 data.js 全程不出这个页面。
    两条硬规矩：
    1) 新专辑只能追加到数组末尾 —— _lyrics 分片按专辑下标命名，重排会让歌词全部错位。
-   2) 写 data.js 之前先存一份 data.js.bak-<时间>，真写坏了还能捞回来。 */
+   2) 写 data.js 之前先存一份 _备份/data.js.bak-<时间>，真写坏了还能捞回来。 */
 const IMP_AUDIO=/\.(flac|wav|ape|m4a|mp3|dsf|dff|wv|tta|aiff|alac)$/i;
 const IMP_COVER=/^(folder|cover|front|封面)\.(jpe?g|png|webp)$/i;
-const IMP_SKIP=new Set(['_covers','_lyrics','.git','__pycache__','System Volume Information','$RECYCLE.BIN']);
+const IMP_SKIP=new Set(['_covers','_lyrics','_备份','启动器','.git','__pycache__','System Volume Information','$RECYCLE.BIN']);
 const impEra=y=>{
   const n=parseInt(y,10);
   if(!n)return '未标年';
@@ -2545,7 +2545,7 @@ async function impServer(){
   }
   const tail=[pending.length?pending.length+' 张待拆分':'',odd.length?odd.length+' 张格式不支持':''].filter(Boolean).join('，');
   impShow(fresh.length?'发现 '+fresh.length+' 张可入库'+(tail?'，'+tail:''):'没有可写入的'+(tail?'（'+tail+'）':''),
-    '写入方式：新专辑追加到 data.js 末尾（不改动已有顺序，否则歌词分片会错位），写之前先存一份 data.js.bak-时间。\n'+
+    '写入方式：新专辑追加到 data.js 末尾（不改动已有顺序，否则歌词分片会错位），写之前先存一份 _备份/data.js.bak-时间。\n'+
     (pending.length?'其中 '+pending.length+' 张是「整轨 + CUE」：整张盘只有一个音频文件，硬写进去会变成 1 首。\n先在命令行跑 python 音乐库.py 拆轨，拆完再点一次入库。':''),
     items, fresh.length?'写入 '+fresh.length+' 张':'');
   if(fresh.length){
@@ -2752,7 +2752,7 @@ async function impPicker(){
     }
     const noQ=albums.filter(a=>!a.quality||a.quality==='未标注').length;
     const note=[
-      '写入方式：新专辑追加到 data.js 末尾（不改动已有顺序，否则歌词分片会错位），写之前先存一份 data.js.bak-时间。',
+      '写入方式：新专辑追加到 data.js 末尾（不改动已有顺序，否则歌词分片会错位），写之前先存一份 _备份/data.js.bak-时间。',
       cueOnes.length?'其中 '+cueOnes.length+' 张是「整轨 + CUE」：整张盘只有一个音频文件，硬写进去会变成 1 首。\n先在命令行跑 python 音乐库.py 拆轨，拆完再点一次入库。':'',
       noQ?'有 '+noQ+' 张读不到音质信息，先标成「未标注」，不影响播放。':''
     ].filter(Boolean).join('\n');
@@ -2788,10 +2788,11 @@ async function impCommit(root){
     const fh=await root.getFileHandle('data.js');
     const oldText=await (await fh.getFile()).text();
     ilog('读到原 data.js：'+impMB(oldText));
-    // 1) 备份原件：写坏一次还能原样捞回来
-    const bak=await root.getFileHandle('data.js.bak-'+stamp,{create:true});
+    // 1) 备份原件：写坏一次还能原样捞回来。放 _备份/ 里，跟源码分开
+    const bakDir=await root.getDirectoryHandle('_备份',{create:true});
+    const bak=await bakDir.getFileHandle('data.js.bak-'+stamp,{create:true});
     const bw=await bak.createWritable();await bw.write(oldText);await bw.close();
-    ilog('已备份：data.js.bak-'+stamp);
+    ilog('已备份：_备份/data.js.bak-'+stamp);
     // 2) 追加新专辑：只能 push 到末尾
     for(const al of impPlan){A.push(al);IDX.set(al,A.length-1);}
     D.albums=A;D.generated=day;
@@ -2812,7 +2813,7 @@ async function impCommit(root){
     const u=D.updates.find(x=>x.date===day);
     const added=u&&u.text&&u.text!==beforeText?u.text.slice(beforeText.replace(/[。；;\s]+$/,'').length).replace(/^；/,''):'';
     impShow('入库完成：'+n+' 张 / '+trk+' 曲',
-      'data.js 的原件备份为 data.js.bak-'+stamp+'。\n\n'+
+      'data.js 的原件备份为 _备份/data.js.bak-'+stamp+'。\n\n'+
       (beforeText?'今天已经有一条足迹了，按规矩并进同一条，接在末尾：':'今天的足迹已经写进首页右下角那条时间轴：')+
       '\n「'+(u?u.title:'')+'」'+(beforeText?'…；':'')+added+
       '\n\n想让这几张也有歌词和准确时长，回到命令行跑一次：\n  python 音乐库.py 歌词 --jobs 4\n  python 音乐库.py 校准 --fix\n路径全是相对的，这张盘换到别的电脑，插上双击本页就能用。',[],'');

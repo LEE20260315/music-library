@@ -23,6 +23,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent.parent
 TARGET = HERE / "音乐库.html"
 LYRIC_DIR = HERE / "_lyrics"
+BAK_DIR = HERE / "_备份"          # --backup 的副本也放进备份目录，别堆在库根目录
 
 if sys.platform == "win32":
     try:
@@ -61,7 +62,8 @@ def read_html():
 
 def check_backup():
     now = datetime.now().strftime("%Y%m%d-%H%M%S")
-    dst = HERE / f"音乐库.备份-{now}.html"
+    BAK_DIR.mkdir(parents=True, exist_ok=True)
+    dst = BAK_DIR / f"音乐库.备份-{now}.html"
     shutil.copy2(TARGET, dst)
     ok(f"已备份 -> {dst.name}")
 

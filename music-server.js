@@ -23,6 +23,7 @@ const zlib = require('zlib');
 const { URL } = require('url');
 
 const ROOT = __dirname;
+const BAK_DIR = path.join(ROOT, '_备份');   // data.js 的历史备份都放这儿，别堆在根目录
 const PORT = parseInt(process.argv[2] || process.env.PORT || '8099', 10);
 const INDEX = '音乐库.html';
 
@@ -117,7 +118,7 @@ function safeResolve(urlPath) {
    只允许本机访问：远程（局域网 / Tailscale）打开页面只能听，不能写库。 */
 const IMP_SKIP_DIRS = new Set(['_covers', '_lyrics', '.git', '__pycache__',
   'System Volume Information', '$RECYCLE.BIN', '_重复待删', '_原盘', '_损坏删除',
-  '_删除清单', 'node_modules']);
+  '_删除清单', 'node_modules', '_备份', '启动器']);
 /* 有意当母带留着的目录：内容已经以 FLAC 形式入库，DSF 只是保底存档，
    浏览器放不了、也不该再被列进"待入库"里打扰人。按目录名精确匹配。 */
 const IMP_ARCHIVE_DIRS = new Set([
@@ -343,7 +344,10 @@ function commitImport(rels) {
   const now = new Date(), p2 = v => String(v).padStart(2, '0');
   const stamp = now.getFullYear() + p2(now.getMonth() + 1) + p2(now.getDate()) + '-' + p2(now.getHours()) + p2(now.getMinutes());
   const day = now.getFullYear() + '-' + p2(now.getMonth() + 1) + '-' + p2(now.getDate());
-  const bak = path.join(ROOT, 'data.js.bak-' + stamp);
+  /* 备份统一收进 _备份/：以前全堆在库根目录，几十个 .bak 和源码混在一起，
+     翻文件时根本分不清哪个是程序、哪个是某天写坏前的存档。 */
+  fs.mkdirSync(BAK_DIR, { recursive: true });
+  const bak = path.join(BAK_DIR, 'data.js.bak-' + stamp);
   fs.copyFileSync(path.join(ROOT, 'data.js'), bak);
   for (const al of picked) data.albums.push(al);       // 只能 push 到末尾：_lyrics 分片按数组下标命名
   data.generated = day;
@@ -359,7 +363,7 @@ function commitImport(rels) {
   fs.writeFileSync(path.join(ROOT, 'data.js'), txt, 'utf8');
   const u = data.updates.find(x => x.date === day);
   // 把写入的条目原样回给页面：页面据此就地更新，不必整页重载
-  return { added: picked.length, tracks: trk, backup: path.basename(bak), total: data.albums.length, update: u, albums: picked, skippedDup };
+  return { added: picked.length, tracks: trk, backup: '_备份/' + path.basename(bak), total: data.albums.length, update: u, albums: picked, skippedDup };
 }
 
 /* 从 file:// 双击打开的页面也会来调这些接口，那是个不透明来源（Origin: null）。
