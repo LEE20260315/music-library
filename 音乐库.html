@@ -1411,7 +1411,9 @@ function paragraphsOf(text){
     const block=raw.replace(/[ \t\u3000]*\n[ \t\u3000]*/g,'').trim();
     if(!block)return;
     if(block.length<=110){out.push(block);return;}
-    const sents=block.match(/[^。！？!?；;]+[。！？!?；;]?/g)||[block];
+    // 句末标点后面常跟着收尾的引号/括号（"…奇才。」"），把它们留在本句，
+    // 否则下一段会以 」/” 开头，看着像从半句起头。
+    const sents=block.match(/[^。！？!?；;]+[。！？!?；;]?[”’」』）】]*/g)||[block];
     let cur='';
     sents.forEach(s=>{
       if(cur&&cur.length+s.length>110){out.push(cur.trim());cur='';}
