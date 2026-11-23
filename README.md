@@ -28,6 +28,23 @@
 
 **公共仓库不包含数据。** `无损/`、`有损/`、`_covers/`、`_lyrics/`、`data.js`、`durations.js` 和备份文件均被 `.gitignore` 排除。clone 后只是程序，不含 1811 张专辑、21216 首曲目及音频；需自行准备数据文件和音乐目录。
 
+## `音乐库.html` 依赖哪些文件
+
+页面是单文件，但运行时仍要读下面这些。全部用相对路径，所以只能在项目根目录打开。
+
+| 依赖 | 谁在读 | 必需 | 缺了会怎样 |
+|---|---|---:|---|
+| `data.js` | `<script src>`，`音乐库.html:778` | 是 | 首页空白并提示数据缺失，会再 `fetch` 重试一次 |
+| `durations.js` | `<script src>`，`音乐库.html:782` | 否 | 用音频头里的时长，个别写错头的曲目拖进度会停 |
+| `无损/<rel>/<p>` | `audUrl()`，`音乐库.html:901` | 是 | 该曲播不出来 |
+| `_covers/<coverFile>` | `imgUrl()`，`音乐库.html:892` | 否 | 退回专辑目录里的 `folder.jpg` 等原图；都没有就用占位 |
+| `_lyrics/a<下标>.js` | `ensureAlbumLyrics()` 动态插 `<script>`，`音乐库.html:1603` | 否 | 该专辑退回联网搜 lrclib |
+| `music-server.js` 的 `/api/*` | 只有入库流程用 | 否 | 双击 `file://` 打开仍能听，只是不能入库 |
+
+联网只有一个外部域名：没有本地歌词时去 `https://lrclib.net/api/search` 找（`音乐库.html:1569`）。样式、脚本、图标、字体全部内嵌，没有 CDN、没有构建产物。
+
+本机服务提供的接口：`/api/ping`、`/api/import/scan`、`POST /api/import/commit`、`POST /api/import/probe`、`POST /api/import/folder`、`POST /api/browse`。播放链路不经过它们。
+
 ## 跑起来
 
 Windows 本机双击 `启动音乐库服务器.vbs`，或在项目目录运行：
