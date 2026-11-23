@@ -101,9 +101,9 @@ html[data-theme="night"] .theme-btn .ic-moon{display:none}
   #main{overflow:visible}
   .sidebar{min-height:240px;max-height:70vh}
 }
-/* 两条长横线之间只留该留的那点空：上边距压到 7px，
-       下边距给 0——那条底线正好落在搜索框的下沿，不再多挂一截空线头。 */
-.toolbar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--paper) 93%,transparent);backdrop-filter:blur(10px);padding:7px 0 0;border-bottom:1px solid var(--line);margin-bottom:14px}
+/* 工具栏不再画线：它和搜索框本来就贴在一起，那条线只会从搜索框中间穿过去。
+   要分界就让留白来分——上边 7px、下边 10px。 */
+.toolbar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--paper) 93%,transparent);backdrop-filter:blur(10px);padding:7px 0 10px;margin-bottom:2px}
 .toolrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 /* 标签行不铺满整行：右侧留给搜索框，两者中间自然留白，视线不会被拉成一条长线 */
 .tabs{display:flex;gap:4px;flex-wrap:wrap;flex:0 1 auto}
@@ -155,7 +155,7 @@ html[data-theme="night"] .theme-btn .ic-moon{display:none}
 .mode-btn:hover{border-color:var(--terra);color:var(--terra)}
 .mode-btn.on{background:var(--terra);border-color:var(--terra);color:#fff}
 /* ===== 底部迷你播放条：关掉唱片页也还能控制，不用一路滚回封面 ===== */
-.mini{position:fixed;left:0;right:0;bottom:0;z-index:90;display:none;align-items:center;gap:12px;padding:9px 18px;
+.mini{position:fixed;left:0;right:0;bottom:0;z-index:90;display:none;align-items:center;gap:12px;padding:9px 18px;overflow:hidden;
   background:color-mix(in srgb,var(--paper) 94%,transparent);backdrop-filter:blur(12px);
   border-top:1px solid var(--line);box-shadow:0 -6px 22px rgba(0,0,0,.07)}
 .mini.on{display:flex}
@@ -169,13 +169,15 @@ body.has-mini{padding-bottom:66px}
 .mini .mt b{display:block;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mini .mt span{font-size:10.5px;color:var(--ink-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
 /* 当前这一句歌词：只显示正在唱的那一句，没有歌词就整行不占位 */
-.mini .ml{font-family:var(--serif);font-size:12px;color:var(--terra);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:none;max-width:38vw}
+.mini .ml{font-family:var(--serif);font-size:12px;color:var(--terra);overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;display:none;max-width:38vw}
 .mini .ml.on{display:block}
-/* 一句一句地过：新的从右边划进来，旧的先向左划出去，不是整块地换字。 */
-.mini .ml.ml-in{animation:mlIn .52s cubic-bezier(.22,.8,.3,1) both}
-.mini .ml.ml-out{animation:mlOut .17s cubic-bezier(.4,0,1,1) both}
-@keyframes mlIn{from{opacity:0;transform:translateX(24px)}55%{opacity:1}to{opacity:1;transform:none}}
-@keyframes mlOut{from{opacity:1;transform:none}to{opacity:0;transform:translateX(-14px)}}
+/* 一句一句地过：纵向。新的从条子下沿升上来（迷你条本身就在屏幕最底下，
+   看上去就是"从屏幕下面滑出来"），旧的往上退走。整条 clip 住，不出界。 */
+.mini .ml.ml-in{animation:mlIn .46s cubic-bezier(.22,.8,.3,1) both}
+.mini .ml.ml-out{animation:mlOut .16s cubic-bezier(.4,0,1,1) both}
+@keyframes mlIn{from{opacity:0;transform:translateY(15px)}55%{opacity:1}to{opacity:1;transform:none}}
+@keyframes mlOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-9px)}}
 @media(prefers-reduced-motion:reduce){.mini .ml.ml-in,.mini .ml.ml-out{animation:none}}
 .mini button{border:0;background:var(--ink);color:var(--paper);width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:12px;flex:none;display:flex;align-items:center;justify-content:center;transition:.2s}
 .mini button:hover{background:var(--terra)}
@@ -314,7 +316,7 @@ body.has-mini{padding-bottom:66px}
 /* 足迹正文：11px / 1.44 行距。每段外边距必须是 0——
    有外边距时，段内两行之间是 1.44，跨段之间是 1.44+4px，肉眼一看就是
    「有的宽有的窄」。全清零，整块才是等距的一列。 */
-.tree .x{font-size:11px;color:var(--ink-soft);line-height:1.44}
+.tree .x{font-size:11px;color:var(--ink-soft);line-height:1.44;text-align:justify;text-align-last:left}
 .tree .x p{margin:0;text-indent:0}
 .tree .x p:last-child{margin-bottom:0}
 .empty{padding:70px 0;text-align:center;color:var(--ink-faint);font-family:var(--serif);font-size:17px}
@@ -327,12 +329,13 @@ body.has-mini{padding-bottom:66px}
 @keyframes playerIn{from{opacity:0;transform:translateY(20px) scale(.994)}to{opacity:1;transform:none}}
 @keyframes playerOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(14px) scale(.996)}}
 @media(prefers-reduced-motion:reduce){.player.open,.player.open.closing{animation-duration:.01s}}
-.pbar{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--paper) 93%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:12px 26px;display:flex;align-items:center;justify-content:space-between}
+/* 顶栏不画底线：这条线会在站名下面横穿一整个屏幕，比什么都抢眼。 */
+.pbar{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--paper) 93%,transparent);backdrop-filter:blur(10px);padding:12px 26px 6px;display:flex;align-items:center;justify-content:space-between}
 /* 顶栏中间不再是 NOW PLAYING，而是首页那行站名：极小、极淡、带铅字斑驳。
    斑驳用的是专给小字调的那枚滤镜（worn-xs）——首页那枚 erode 0.8 是为
    40px 的大字做的，套到 8px 上会把整个字啃光。 */
-.pbar-now{font-family:var(--brand);font-size:8.5px;color:var(--ink-faint);letter-spacing:.16em;line-height:1;
-  opacity:.55;filter:url(#worn-xs);font-feature-settings:"palt" 0;user-select:none}
+.pbar-now{font-family:var(--brand);font-size:12px;color:var(--ink-soft);letter-spacing:.16em;line-height:1;
+  opacity:.7;filter:url(#worn-xs);font-feature-settings:"palt" 0;user-select:none}
 .pbar-now .dot{color:var(--terra)}
 .pbar-now .zh{font-size:.8em;letter-spacing:.1em;margin-left:.2em;font-family:var(--brand)}
 .close-btn{border:1px solid var(--line);background:var(--paper-2);color:var(--ink);border-radius:999px;padding:7px 16px;cursor:pointer;font-size:13px}.close-btn:hover{border-color:var(--terra);color:var(--terra)}
@@ -432,9 +435,9 @@ body.has-mini{padding-bottom:66px}
 .pcol-h{flex:none;font-family:var(--serif);font-size:16px;color:var(--terra);margin:0 0 .8em;font-weight:600;line-height:1.2}
 /* 正文占满剩余高度：内容多了在卡片里滚（滚轮即可，不画拖动条），
    少了也不硬撑——卡片本身是等高的，留白在下面。 */
-/* 正文字号跟首页「库的足迹」一起收到 12.5px / 1.6：卡片只有两百多像素宽，
-   再大的字一行放不下二十个字，行距一松就成了碎纸条。 */
-.pcol-t{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;font-size:12.5px;line-height:1.6;color:var(--ink-soft);white-space:pre-wrap;text-align:justify}
+/* 字号与首页「库的足迹」正文完全一致（11px），行距仍留 1.6：
+   卡片只有两百多像素宽，行距再压，中文的竖笔会连成一片。 */
+.pcol-t{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;font-size:11px;line-height:1.6;color:var(--ink-soft);white-space:pre-wrap;text-align:justify}
 .pcol-t p{margin:0 0 .42em;text-indent:2em;text-align:justify}
 /* 上下两端只在"还有内容没看完"的那一侧渐隐：滚到顶就没有上边的白，
    滚到底就没有下边的白。不滚动时整块都是实心的，不会平白吃掉最后一行。 */
