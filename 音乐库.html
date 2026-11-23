@@ -111,11 +111,15 @@ html[data-theme="night"] .theme-btn .ic-moon{display:none}
 .tab:hover{background:var(--paper-2);color:var(--ink)}.tab.on{background:var(--ink);color:var(--paper)}
 .search{margin-left:auto;position:relative}.search input{width:210px;border:1px solid var(--line);background:var(--paper-2);color:var(--ink);border-radius:999px;padding:3px 14px 3px 32px;font-size:13px;line-height:22px;outline:none;transition:.2s}
 .search input:focus{width:260px;border-color:var(--terra)}.search::before{content:"⌕";position:absolute;left:11px;top:5px;color:var(--ink-faint);font-size:16px}
-.card{cursor:pointer;min-width:0}.cover-wrap{position:relative;aspect-ratio:1;border-radius:11px;overflow:hidden;background:var(--paper-3);box-shadow:var(--shadow);transition:transform .25s,box-shadow .25s}
+.card{cursor:pointer;min-width:0}.cover-wrap{position:relative;aspect-ratio:1;border-radius:11px;overflow:hidden;background:var(--paper-3);box-shadow:var(--shadow);transition:transform .25s,box-shadow .25s;container-type:inline-size}
 .card:hover .cover-wrap{transform:translateY(-4px);box-shadow:var(--shadow-2)}
 .cover-wrap img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .4s}
 .cover-wrap .ph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:32px;color:var(--ink-faint);background:linear-gradient(135deg,var(--paper-2),var(--paper-3))}
-.badge{position:absolute;left:7px;top:7px;background:color-mix(in srgb,var(--paper) 88%,transparent);color:var(--terra);font-size:9px;font-weight:700;padding:3px 6px;border-radius:5px}
+/* 音质角标跟着封面一起缩：.cover-wrap 声明了 container-type:inline-size，
+   子元素就能用 cqw（封面宽度的 1%）。墙上封面实测 90–196px 都有，
+   固定 9px 的字在小封面上占到四成多宽度、正好糊在人脸上，大封面上又偏小。
+   上限压在 10px：再大就比卡片标题还抢眼了。左下角的律动条与播放键不受影响。 */
+.badge{position:absolute;left:clamp(4px,2.4cqw,8px);top:clamp(4px,2.4cqw,8px);background:color-mix(in srgb,var(--paper) 88%,transparent);color:var(--terra);font-size:clamp(7.5px,5cqw,10px);font-weight:700;padding:.3em .6em;border-radius:.55em;white-space:nowrap;line-height:1.25}
 .card-play{position:absolute;right:8px;bottom:8px;width:34px;height:34px;border-radius:50%;border:0;background:var(--terra);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transform:scale(.8);transition:.2s}
 .card:hover .card-play{opacity:1;transform:scale(1)}.card-play:hover{background:var(--ink);transform:scale(1.1)!important}
 /* ===== 就地播放：封面整体变成一张旋转的黑胶 =====
@@ -1145,10 +1149,23 @@ function layoutWall(){
 /* 「换一批」书签的位置全交给 CSS（.content 里 absolute + right:-26px），
    以前那个用 getBoundingClientRect 算 right 的函数只会因为 zoom 双重缩放而漂移，已经删掉。 */
 addEventListener('resize',()=>{clearTimeout(wallTimer);wallTimer=setTimeout(layoutWall,140);});
+/* 墙上封面只标位深，采样率收进 title。
+   为什么：那面墙的封面宽度是 90–196px 随机的，完整的「24bit / 176.4kHz」
+   有 16 个字符，字号无论怎么缩都要占掉四成以上封面宽——小封面更甚，
+   正好糊在人脸上。位深才是用来一眼分辨的（有损 / CD / Hi-Res），
+   采样率鼠标停一下就有，专辑页的 chips 里也一直写着（那边不受影响）。 */
+function qualBadge(q){
+  const s=String(q||'').trim(),parts=s.split('/');
+  const tag=(t,tip)=>'<span class="badge" title="'+esc(tip)+'">'+esc(t)+'</span>';
+  if(parts.length!==2)return tag(s,s);
+  const bit=parts[0].trim(),khz=parts[1].trim();
+  if(!bit.endsWith('bit')||!khz.endsWith('kHz'))return tag(s,s);
+  return tag(bit,s);
+}
 function card(al,i){
   const u=imgUrl(al);
   const cover=u?'<img loading="lazy" src="'+u+'" alt="">':'<div class="ph"><b>'+esc((al.album||'♪').trim().charAt(0))+'</b></div>';
-  return '<div class="card" data-i="'+IDX.get(al)+'" style="--i:'+i+'"><div class="cover-wrap">'+cover+'<span class="badge">'+esc(al.quality)+'</span><span class="card-playback" aria-hidden="true"><i></i><i></i><i></i><i></i></span><button class="card-play" title="就地播放">▶</button></div><div class="cap"><div class="nm" title="'+esc(al.album)+'">'+esc(al.album)+'</div><div class="ar">'+esc(al.artist)+(al.disc?' · '+al.disc:'')+'</div></div></div>';
+  return '<div class="card" data-i="'+IDX.get(al)+'" style="--i:'+i+'"><div class="cover-wrap">'+cover+qualBadge(al.quality)+'<span class="card-playback" aria-hidden="true"><i></i><i></i><i></i><i></i></span><button class="card-play" title="就地播放">▶</button></div><div class="cap"><div class="nm" title="'+esc(al.album)+'">'+esc(al.album)+'</div><div class="ar">'+esc(al.artist)+(al.disc?' · '+al.disc:'')+'</div></div></div>';
 }
 /* 换一批：旧的一批原地翻走（.leaving），换完新的一批从反面翻回来。
    两段各 340ms，重叠 40ms，连起来就是"翻过去、翻回来"，中间不会空一帧。 */
