@@ -555,6 +555,9 @@ body.has-mini{padding-bottom:66px}
 .imp-act button{border-radius:999px;padding:8px 18px;font-size:12.5px;cursor:pointer;border:1px solid var(--line);background:var(--paper-2);color:var(--ink)}
 .imp-act .go{border-color:var(--terra);background:var(--terra);color:#fff}
 .imp-act button[disabled]{opacity:.55;cursor:progress}
+/* 停用的主按钮只剩 55% 不透明，底色仍是那块陶土色，看着照样能点。
+   换成浅底+灰字，让人一眼知道现在按它没用。 */
+.imp-act .go[disabled]{border-color:var(--line);background:var(--paper-2);color:var(--ink-faint);opacity:1;cursor:default}
 /* 进度条：扫描时要有"在动"的东西，否则用户看到的就是"点了没反应" */
 .imp-bar{height:3px;border-radius:2px;background:var(--line);overflow:hidden;margin:0 0 12px}
 .imp-bar i{display:block;height:100%;width:0;background:var(--terra);transition:width .25s ease}
@@ -2333,7 +2336,8 @@ async function ibOpen(dir){
   impShow('从文件夹导入', dir?('正在看 '+dir):'选一个目录：里面可以是一张专辑，也可以是一批专辑的上级目录。',
           [],'');
   impList.hidden=true; $('impBrowse').hidden=false;
-  $('impGo').textContent='';$('impGo').disabled=true;
+  // 目录浏览阶段主按钮还没什么可做的，但也不能留一个空白的胶囊——看着像坏了
+  $('impGo').textContent='先选一个目录';$('impGo').disabled=true;
   await ibGo(dir||null);
 }
 
