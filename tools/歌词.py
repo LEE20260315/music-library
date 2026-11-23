@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""补歌词.py — 从 lrclib.net 与网易云音乐抓同步歌词，落成本地分片 JS（离线可用）。
+"""歌词.py — 从 lrclib.net 与网易云音乐抓同步歌词，落成本地分片 JS（离线可用）。
 
 用法:
-  python 补歌词.py                  # 全量
-  python 补歌词.py --limit 40      # 只处理 40 首未处理项
-  python 补歌词.py --jobs 4        # 全局并发，默认 4（上限 4）
-  python 补歌词.py --album 123     # 调试单张专辑（专辑下标）
-  python 补歌词.py --retry-miss    # 重跑 _state.json 中记为 miss 的曲目
-  python 补歌词.py --min-score 3   # lrclib 匹配分阈值，默认 3
+  python 音乐库.py 歌词                  # 全量
+  python 音乐库.py 歌词 --limit 40      # 只处理 40 首未处理项
+  python 音乐库.py 歌词 --jobs 4        # 全局并发，默认 4（上限 4）
+  python 音乐库.py 歌词 --album 123     # 调试单张专辑（专辑下标）
+  python 音乐库.py 歌词 --retry-miss    # 重跑 _state.json 中记为 miss 的曲目
+  python 音乐库.py 歌词 --min-score 3   # lrclib 匹配分阈值，默认 3
 
 匹配顺序：lrclib（带专辑名搜索 → miss 且有专辑名时去掉专辑名再搜一次）
         → 网易云（search 取第一条曲名证据通过的候选 → 取其歌词）。

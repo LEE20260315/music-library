@@ -17,10 +17,10 @@
 输出 durations.js 给播放器当"真实时长表"使用。
 
 用法（在本目录打开 PowerShell）：
-    python 校准时长.py                # 全库扫描，生成 durations.js
-    python 校准时长.py --sample 20    # 只抽 20 个看看结果
-    python 校准时长.py --fix --dry-run   # 预览将要修正哪些文件的头部时长
-    python 校准时长.py --fix          # 就地修正 FLAC 头部时长（可撤销，见下）
+    python 音乐库.py 校准                # 全库扫描，生成 durations.js
+    python 音乐库.py 校准 --sample 20    # 只抽 20 个看看结果
+    python 音乐库.py 校准 --fix --dry-run   # 预览将要修正哪些文件的头部时长
+    python 音乐库.py 校准 --fix          # 就地修正 FLAC 头部时长（可撤销，见下）
 """
 import sys, os, json, threading
 from concurrent.futures import ThreadPoolExecutor
@@ -393,7 +393,7 @@ def main():
         list(pool.map(work, files))
 
     OUT_JS.write_text(
-        '/* 由「校准时长.py」生成，请勿手改。\n'
+        '/* 由「音乐库.py 校准」生成，请勿手改。\n'
         '   LIB_DUR：每首曲目的真实可播时长（秒）。很多 FLAC 的头部时长被写成了\n'
         '            整张专辑的长度，播放器用它当进度条上限，才不会一拖就撞到文件末尾。\n'
         '   LIB_OFF：曲目第一帧在"整张专辑时间轴"上的起始秒数。这些文件是从整张专辑\n'

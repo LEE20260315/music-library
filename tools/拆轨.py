@@ -7,10 +7,10 @@ r"""按 CUE 把整轨音频拆成单曲，放进 无损/<艺人>/<专辑>/。
   （进度条横跨整张盘），歌词也无从对齐。所以这类碟必须先在命令行拆开，再走入库。
 
 用法：
-  python 拆分CUE.py --src "D:\BaiduNetdiskDownload\群星 《丹拿2005试音碟》[WAV+CUE]"
-  python 拆分CUE.py --src "..." --artist 群星 --album 丹拿2005试音碟 --year 2005
-  python 拆分CUE.py --scan          # 只看 无损/ 下还有哪些整轨碟没拆
-  python 拆分CUE.py --dry-run       # 只打印要做什么，不动磁盘
+  python 音乐库.py 拆轨 --src "D:\下载\群星 《丹拿2005试音碟》[WAV+CUE]"
+  python 音乐库.py 拆轨 --src "..." --artist 群星 --album 丹拿2005试音碟 --year 2005
+  python 音乐库.py 拆轨 --scan          # 只看 无损/ 下还有哪些整轨碟没拆
+  python 音乐库.py 拆轨 --dry-run       # 只打印要做什么，不动磁盘
 
 做的事：
   1. 读 .cue（GBK / UTF-8 自动识别，GBK 是中文碟的绝大多数）
@@ -267,7 +267,7 @@ def split_one(src, artist=None, album=None, year=None, dry=False, move_raw=False
         print('原盘仍在原地：' + src)
         print('（默认不搬，E 盘常年吃紧。确认拆好了就自己删掉它，或加 --move-raw 让脚本搬到 _原盘/。）')
     print('下一步：回到 音乐库.html 点「＋ 专辑入库」，它会把这张盘写进 data.js；')
-    print('        再跑 python 校准时长.py --fix 补真实时长。')
+    print('        再跑 python 音乐库.py 校准 --fix 补真实时长。')
     return dest
 
 
@@ -290,7 +290,7 @@ def scan():
     print('还有 %d 张整轨碟没拆：' % len(hits))
     for h in hits:
         print('  ' + h)
-    print('\n逐张跑：python 拆分CUE.py --src "<上面那条路径>"')
+    print('\n逐张跑：python 音乐库.py 拆轨 --src "<上面那条路径>"')
 
 
 def main():

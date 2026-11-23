@@ -8,8 +8,8 @@
   · <script>/<style> 标签不闭合。
 
 用法：
-    python 检查音乐库.py            # 检查，通过则退出码 0
-    python 检查音乐库.py --backup   # 检查 + 先把当前文件备份成 音乐库.备份-<时间>.html
+    python 音乐库.py 检查            # 检查，通过则退出码 0
+    python 音乐库.py 检查 --backup   # 检查 + 先把当前文件备份成 音乐库.备份-<时间>.html
 """
 import re
 import sys
@@ -179,7 +179,7 @@ def check_lyrics(html):
                 fail(f"_state.json 读不出来：{e}")
         ok(f"歌词分片 {len(shards)} 个，已抓 {hit + miss} 首（命中 {hit} / 未命中 {miss}）")
     else:
-        notes.append("_lyrics/ 还不存在（补歌词.py 尚未跑过）")
+        notes.append("_lyrics/ 还不存在（音乐库.py 歌词 尚未跑过）")
 
 
 def check_data_json():

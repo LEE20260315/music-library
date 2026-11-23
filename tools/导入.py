@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 r"""从任意文件夹入库：整轨碟按 CUE 拆，多文件专辑直接复制进库。
 
-    python 导入文件夹.py --probe "D:\...\Jay"          # 只分析，输出 JSON
-    python 导入文件夹.py --probe "D:\...\周杰伦日版"      # 上级目录：一批专辑
-    python 导入文件夹.py --import "D:\...\Jay"          # 真入库（拆或复制）
-    python 导入文件夹.py --import "D:\...\周杰伦日版" --all   # 批量
+    python 音乐库.py 导入 --probe "D:\...\Jay"          # 只分析，输出 JSON
+    python 音乐库.py 导入 --probe "D:\...\周杰伦日版"      # 上级目录：一批专辑
+    python 音乐库.py 导入 --import-root "D:\...\Jay"          # 真入库（拆或复制）
+    python 音乐库.py 导入 --import-root "D:\...\周杰伦日版" --all   # 批量
 
 设计原则：
-  · 只用标准库 + ffmpeg/ffprobe，和 拆分CUE.py 复用同一套解析。
+  · 只用标准库 + ffmpeg/ffprobe，和 拆轨.py 复用同一套解析。
   · 不改 data.js：入库仍旧走页面/服务那条已验证的路径，这里只负责把文件放到
     无损/<艺人>/<目录名>/ 下并把 rel 报出来。
   · 复制用 copy2 保留时间戳；源目录默认不动（用户自己决定删）。

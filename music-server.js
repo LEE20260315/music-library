@@ -664,7 +664,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('音乐库服务器已启动（原样发送，不做任何转码）');
   console.log('  本机      http://127.0.0.1:' + PORT + '/');
   console.log('  局域网    http://<本机局域网IP>:' + PORT + '/');
-  console.log('  Tailscale http://nztz-001.geep-cirius.ts.net/');
+  console.log('  Tailscale http://<节点名>.<tailnet 名>.ts.net/（配了才有）');
   console.log('  目录      ' + ROOT);
 });
 

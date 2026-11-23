@@ -50,8 +50,7 @@ function writeAddr(url, note) {
     '  · 手机浏览器直接打开即可，不用装任何 App、不用登录。\n' +
     '  · 本网址是公开的：拿到链接的人都能访问并下载音乐。\n' +
     '  · 想固定网址，需要用「命名隧道」+ 自己的域名。\n\n' +
-    '本机局域网地址：http://192.168.10.118:8099/\n' +
-    'Tailscale 地址：http://nztz-001.geep-cirius.ts.net/\n';
+    '局域网：http://<本机局域网IP>:8099/\n';
   try {
     fs.writeFileSync(ADDR_FILE, text, 'utf8');
     log('网址已写入 ' + path.basename(ADDR_FILE));
