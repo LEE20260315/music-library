@@ -452,11 +452,30 @@ function runPy(args, done) {
   });
 }
 
+/* 探测的是库外的目录，标签靠不住：EAC 抓的碟 album 标签常写成 CDImage，
+   艺人标签常是整轨的主演者而不是专辑艺人。所以并行看三条线索，
+   命中任一条就报重复——标签、目录名解析、以及「目录名在库里是否已经有一张一样的」。
+   第三条是为了认繁体/异体写法（周杰倫 与 周杰伦 是同一张，字面却不同）。 */
 function annotateProbe(result) {
   if (!result || !Array.isArray(result.albums)) return result;
   const { data } = readData();
   const index = buildDuplicateIndex(data.albums);
-  for (const a of result.albums) a.dup = findDuplicate(index, a.artist, a.album);
+  const byDir = new Map();
+  for (const a of data.albums) {
+    const k = normalizeImportName(String(a.rel || '').split('/').pop() || '');
+    if (k && !byDir.has(k)) byDir.set(k, a);
+  }
+  for (const a of result.albums) {
+    const mi = parseDirName(a.dirname || '');
+    const parent = path.basename(path.dirname(String(a.dir || '')));
+    let dup = null;
+    for (const [ar, al] of [[a.artist, mi.album], [parent, mi.album], [a.artist, a.album], [parent, a.album]]) {
+      if (!ar || !al) continue;
+      dup = findDuplicate(index, ar, al);
+      if (dup) break;
+    }
+    a.dup = dup || byDir.get(normalizeImportName(a.dirname || '')) || null;
+  }
   return result;
 }
 
@@ -526,6 +545,9 @@ function handleApi(req, res, pathname) {
       const args = ['--import-root', o.dir];
       if (o.dry) args.push('--dry-run');
       if (o.only) args.push('--only', o.only);
+      /* 页面上没勾的目录（多半是「库里已有」的那几张）根本不往下发，
+         省掉一次复制或一次整轨拆分——拆完才发现重复再删，成本高得多。 */
+      if (Array.isArray(o.skip) && o.skip.length) args.push('--skip', o.skip.join('\u0001'));
       runPy(args, r => sendJson(req, res, r.code === 0 ? 200 : 500, r.json || { error: r.err }));
     });
   }

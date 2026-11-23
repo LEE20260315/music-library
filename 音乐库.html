@@ -568,6 +568,9 @@ body.has-mini{padding-bottom:66px}
 .imp-log b{color:var(--terra);font-weight:600}
 /* 目录浏览器 */
 .imp-browse{flex:1;min-height:0;display:flex;flex-direction:column;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+/* display:flex 的优先级高过浏览器给 [hidden] 的 display:none，
+   少了这一条，目录浏览器会和清单一起挂在弹层里（点「用这个目录」之前看着像两个列表叠着）。 */
+.imp-browse[hidden]{display:none}
 .ib-crumb{font-size:11px;color:var(--ink-faint);padding:7px 2px;border-bottom:1px dotted var(--line);word-break:break-all}
 .ib-list{flex:1;min-height:120px;max-height:38vh;overflow-y:auto;padding:4px 0;font-size:12.5px}
 .ib-list div.it{display:flex;gap:8px;align-items:baseline;padding:5px 6px;border-radius:6px;cursor:pointer}
@@ -2171,6 +2174,7 @@ function impShow(head,note,items,goText){
       (x.w?'<span class="iw">'+esc(x.w)+'</span>':'')+
       (x.c?'<span class="iq">'+esc(x.c)+'</span>':'')+'</div>'
   ).join(''):'<div class="imp-item"><span class="in">没有需要入库的专辑。</span></div>';
+  impList.onchange=null;                    // 上一屏的勾选回调不能留给这一屏
   impGo.disabled=false;
   impGo.onclick=impHide;                    // 默认按下去就是关窗，别留一个按不动的死按钮
   impGo.textContent=goText||(writable?'写入':'知道了');
@@ -2396,6 +2400,7 @@ async function ibProbe(dir){
   }
   ibData=r;
   const albs=r.albums||[];
+  const dups=albs.filter(a=>a.dup);
   const items=[];
   items.push({sec:'认出 '+albs.length+' 张（'+(r.parent&&albs.length>1?'这批是上级目录里的':'')+'先看清楚再导）'});
   let whole=0, plain=0;
@@ -2405,33 +2410,52 @@ async function ibProbe(dir){
     else {plain++; if(!a.playable)w.push('有浏览器放不了的格式');}
     if(!a.year)w.push('没年份');
     if(!a.cover)w.push('无封面');
-    items.push({a:a.album||a.dirname, b:a.artist+' · '+a.tracks+' 曲'+(a.quality?' · '+a.quality:''),
+    items.push({rel:a.dirname,pick:true,checked:!a.dup,dup:a.dup,
+                a:a.album||a.dirname, b:a.artist+' · '+a.tracks+' 曲'+(a.quality?' · '+a.quality:''),
                 w:w.join('、'), c:a.year||''});
   }
-  impShow('认出 '+albs.length+' 张专辑',
+  impShow('认出 '+albs.length+' 张专辑'+(dups.length?'，'+dups.length+' 张库里已有':''),
     '整轨碟（一个音频 + 一个 cue）会按 CUE 拆成单曲；一堆单独音轨的专辑直接复制进库。\n'+
     '拆是逐轨转 FLAC，慢一些，几百 MB 的碟大约一两分钟；复制很快。\n'+
-    '目标一律落到 无损/<艺人>/<年份> <专辑> [位深-采样率]/，原目录不动。',
-    items, '导入这 '+albs.length+' 张');
-  impGo.disabled=false;
-  impGo.onclick=()=>ibCommit(dir);
+    '目标一律落到 无损/<艺人>/<年份> <专辑> [位深-采样率]/，原目录不动。'+
+    (dups.length?'\n标「重复」的 '+dups.length+' 张默认不导：库里已有同名专辑，再导一份只会多出一个并排的目录。真要再存一份就勾上。':''),
+    items, '');
+  /* 勾选状态决定哪些目录名要拦下来。服务端那次 --skip 传的就是没勾的，
+     这样「库里已有」的专辑根本不会被复制、更不会被拆，省一次返工。 */
+  const updateGoText=()=>{
+    const checked=[...impList.querySelectorAll('.imp-pick:checked')];
+    const skipped=albs.filter(a=>a.dup&&!checked.some(x=>x.dataset.rel===a.dirname)).length;
+    impGo.disabled=!checked.length;
+    impGo.textContent=checked.length
+      ? '导入 '+checked.length+' 张'+(skipped?'（跳过 '+skipped+' 张重复）':'')
+      : '没有可导入的专辑'+(skipped?'（'+skipped+' 张重复）':'');
+  };
+  impGo.onclick=()=>{
+    const checked=[...impList.querySelectorAll('.imp-pick:checked')].map(x=>x.dataset.rel);
+    if(!checked.length)return;
+    const skipDirs=albs.map(a=>a.dirname).filter(d=>checked.indexOf(d)<0);
+    ibCommit(dir,skipDirs);
+  };
+  impList.onchange=updateGoText;          // 用 onchange 而不是 addEventListener：重开弹窗时不会堆一摞旧闭包
+  updateGoText();
 }
 
-async function ibCommit(dir){
+async function ibCommit(dir,skipDirs){
   impGo.disabled=true;impGo.textContent='导入中…';
   impBusy(true);
   impProgress('正在导入…','整轨碟在逐轨转 FLAC。这一步可能要几分钟，别关页面。',0);
-  ilog('从文件夹导入：'+dir);
+  ilog('从文件夹导入：'+dir+(skipDirs&&skipDirs.length?'（跳过 '+skipDirs.length+' 张重复）':''));
   let r;
   try{
-    const res=await fetch(API+'api/import/folder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dir})});
+    const res=await fetch(API+'api/import/folder',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({dir,skip:skipDirs||[]})});
     r=await res.json();
     if(r.error)throw new Error(r.error);
     if(!r.ok)throw new Error(r.error||'导入失败');
   }catch(e){
     impBusy(false);
     impShow('导入失败',(e&&e.message?e.message:e)+'\n已经放进库里的部分不会回滚，可以再点一次（已存在的目录会跳过）。',[],'');
-    impGo.disabled=false;impGo.textContent='重试';impGo.onclick=()=>ibCommit(dir);
+    impGo.disabled=false; impGo.textContent='重试';impGo.onclick=()=>ibCommit(dir,skipDirs);
     return;
   }
   const items=r.items||[];
@@ -2539,7 +2563,7 @@ async function impServer(){
       const rels=[...impList.querySelectorAll('.imp-pick:checked')].map(x=>({rel:x.dataset.rel,force:!!x.closest('.imp-item').querySelector('.imp-dup')}));
       if(rels.length)impServerCommit(rels);
     };
-    impList.addEventListener('change',updateGoText);
+    impList.onchange=updateGoText;        // 同上：一次只留一个处理器
     updateGoText();
   }
 }

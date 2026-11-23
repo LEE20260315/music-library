@@ -181,6 +181,7 @@ def main():
     ap.add_argument('--import-root', dest='imp')
     ap.add_argument('--dry-run', action='store_true')
     ap.add_argument('--only', help='只处理目录名含这个子串的那张')
+    ap.add_argument('--skip', help='跳过这些目录名（\\u0001 分隔）；库里已有同名专辑时由调用方传进来')
     a = ap.parse_args()
 
     if a.probe:
@@ -196,6 +197,9 @@ def main():
     albs = tree['albums']
     if a.only:
         albs = [x for x in albs if a.only in x['dirname']]
+    if a.skip:
+        sk = {s for s in a.skip.split('\u0001') if s}
+        albs = [x for x in albs if x['dirname'] not in sk]
     if not albs:
         print(json.dumps({'ok': False, 'error': '这个目录里没认出专辑（没有音频，或结构太深）'}, ensure_ascii=False))
         return
