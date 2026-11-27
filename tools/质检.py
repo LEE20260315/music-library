@@ -48,6 +48,7 @@ REVIEW_LIST = [
     (1677, "整碟 12 首", "《纯情歌》闽南语专辑：国语老歌词错位挂入闽南语曲目，需核对音频后重抓；曲8 恨世生、曲11 纯情歌存疑"),
     (1678, "曲2/3/5/6/9 错位；曲0/4/7/8 存疑", "《狼 黄金自选辑》：曲1 这一次我绝不放手、曲10 往事随风、曲11 不如这样吧、曲12 夜夜夜夜、曲13 怀念的播音员已核对保留"),
     (1679, "曲1/2/3/6/8/10/11 错位；曲0/4/5/7/9 存疑", "《狼·冬极致模拟版》：曲目名混编、歌词错位，需结合音频核对后重抓"),
+    (1423, "全碟", "《长恨歌》电影原声大碟，artistInfo 挂郑秀文个人简介；原声碟是否应保留演唱者简介待核"),
 ]
 SHARD_RE = re.compile(
     r"^window\.LIB_LYR=window\.LIB_LYR\|\|\{\};window\.LIB_LYR\[(\d+)\]=(\{.*\});$"
@@ -66,9 +67,14 @@ def load_lib():
     return json.loads(raw[len(LIB_PREFIX):-1])["albums"]
 
 
+WEB_RESIDUE = re.compile(r"Biography:|Disclaimer|Tracks Albums|Listeners Journal|Similar Artists Charts|Tags Listeners")
+NEWS_PREFIX = re.compile(r"^【[^】]*(爆料|巡演|待公布|主办方|新闻|消息)[^】]*】")
+
+
 def scan_intro(albums):
     """介绍字段问题。返回 dict 各分组。"""
     same_ai, short_placeholder = [], []
+    web_residue, news_prefix = [], []
     intro_groups = collections.defaultdict(list)
     ai_groups = collections.defaultdict(list)
     for i, a in enumerate(albums):
@@ -79,6 +85,11 @@ def scan_intro(albums):
             same_ai.append(tag)
         if intro and len(intro) < 20:
             short_placeholder.append((tag, intro))
+        if WEB_RESIDUE.search(intro) or WEB_RESIDUE.search(ai):
+            web_residue.append(tag)
+        m = NEWS_PREFIX.match(intro) or NEWS_PREFIX.match(ai)
+        if m:
+            news_prefix.append((tag, m.group(0)))
         if intro:
             intro_groups[norm(intro)].append(i)
         if ai:
@@ -99,6 +110,8 @@ def scan_intro(albums):
         "short": short_placeholder,
         "intro_cross": cross_artist(intro_groups),
         "ai_cross": cross_artist(ai_groups),
+        "web_residue": web_residue,
+        "news_prefix": news_prefix,
     }
 
 
@@ -246,6 +259,13 @@ def write_report(albums, intro, covers, lyr, out_path):
     for v in intro["ai_cross"][:20]:
         w("- %d 张: " % len(v) + " | ".join(
             "%s《%s》" % (albums[i].get("artist"), albums[i].get("album")) for i in v[:5]))
+    w("")
+    w("### 1.5 网页 Biography 残留/新闻前缀: %d 条" % (len(intro["web_residue"]) + len(intro["news_prefix"])))
+    w("")
+    for t in intro["web_residue"]:
+        w("- 网页残留: " + t)
+    for t, s in intro["news_prefix"]:
+        w("- 新闻前缀: %s => `%s`" % (t, s))
     w("")
 
     w("## 二、封面")
