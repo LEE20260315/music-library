@@ -33,10 +33,11 @@ try:
 except Exception:
     pass
 
-ROOT = Path(__file__).resolve().parent.parent   # 音乐库根目录
+HERE = Path(__file__).resolve().parent.parent   # 项目目录（依赖文件）
+ROOT = HERE.parent                              # 音乐库根目录：无损/ 在这儿
 LIB = ROOT / '无损'
-OUT_JS = ROOT / 'durations.js'
-BAK_DIR = ROOT / '_备份'                         # 备份统一收在这里，别散在库根目录
+OUT_JS = HERE / 'durations.js'
+BAK_DIR = HERE / '_备份'                         # 备份统一收在这里，别散在库根目录
 BACKUP = BAK_DIR / '.时长修正备份.json'          # 修正前的原始值，便于撤销
 TAIL = 192 * 1024
 

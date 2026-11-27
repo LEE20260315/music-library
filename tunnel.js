@@ -20,7 +20,7 @@ const path = require('path');
 const ROOT = __dirname;
 const CF = path.join(ROOT, '_下载', 'cloudflared', 'cloudflared.exe');
 const TARGET = 'http://127.0.0.1:8099';
-const ADDR_FILE = path.join(ROOT, '_隧道地址.txt');
+const ADDR_FILE = path.join(path.dirname(ROOT), '_隧道地址.txt');   // 地址文件留在库根
 const LOG_DIR = path.join(ROOT, '_logs');
 const LOG = path.join(LOG_DIR, 'cloudflared.log');
 

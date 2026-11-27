@@ -15,7 +15,8 @@ r"""从任意文件夹入库：整轨碟按 CUE 拆，多文件专辑直接复�
 import argparse, json, os, re, shutil, subprocess, sys
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # 项目目录（依赖文件）
+ROOT = os.path.dirname(HERE)                                        # 音乐库根目录：无损/ 在这儿
 LIB = os.path.join(ROOT, '无损')
 
 from tools import 拆轨 as cq          # 复用 read_text / parse_cue / probe / safe / fmt_khz
@@ -146,7 +147,7 @@ def target_dirname(a):
             ((a['quality'].split(' / ')[1].replace('kHz', '')) if a['quality'] else '?') + ']')
 
 
-STAGE = os.path.join(ROOT, '_导入中')     # 复制中的暂存区，放在 无损/ 外面，扫描永远看不见
+STAGE = os.path.join(HERE, '_导入中')     # 复制中的暂存区，放在 无损/ 外面，扫描永远看不见
 
 
 def do_one(a, dry=False):

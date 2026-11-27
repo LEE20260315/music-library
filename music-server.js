@@ -22,16 +22,18 @@ const path = require('path');
 const zlib = require('zlib');
 const { URL } = require('url');
 
-const ROOT = __dirname;
-const REAL_ROOT = fs.realpathSync(ROOT);   // 库根的真实路径，junction 检查要用
-const BAK_DIR = path.join(ROOT, '_备份');   // data.js 的历史备份都放这儿，别堆在根目录
+const HERE = __dirname;                     // 项目目录：代码与数据文件都在「依赖文件」里
+const ROOT = path.dirname(HERE);            // 库根：无损/、音乐库.html、_隧道地址.txt 在这儿
+const REAL_HERE = fs.realpathSync(HERE);    // 项目目录的真实路径，junction 检查要用
+const REAL_ROOT = fs.realpathSync(ROOT);    // 库根的真实路径，junction 检查要用
+const BAK_DIR = path.join(HERE, '_备份');   // data.js 的历史备份都放这儿，别堆在根目录
 const PORT = parseInt(process.argv[2] || process.env.PORT || '8099', 10);
 const INDEX = '音乐库.html';
 
 /* 访问日志：手机端出问题的时候，桌面这边看不到它的控制台，
    只能靠服务器记下「它请求了没有、请求到了没有、拿到多少字节」。
    超过 5MB 自动轮转成 access.1.log，不占地方。 */
-const LOGDIR = path.join(ROOT, '_logs');
+const LOGDIR = path.join(HERE, '_logs');
 const LOGFILE = path.join(LOGDIR, 'access.log');
 try { fs.mkdirSync(LOGDIR, { recursive: true }); } catch (e) {}
 function accessLog(line) {
@@ -118,18 +120,25 @@ function safeResolve(urlPath) {
   }
   rel = rel.replace(/^\/+/, '');
   if (!rel) return null;
-  const full = path.resolve(ROOT, rel);
-  const rootWithSep = ROOT.endsWith(path.sep) ? ROOT : ROOT + path.sep;
-  if (full !== ROOT && !full.startsWith(rootWithSep)) return null; // 防目录穿越
-  if (!isPublicRel(path.relative(ROOT, full))) return null;
-  /* 目录联接（junction）能骗过上面那道纯字符串检查：无损/x 指向 C:\ 时，
-     前缀看着还在库内，实际读的是库外。按真实路径再判一次，
-     这样「无损/x → _logs」这种拐进敏感目录的联接也一起挡掉。 */
-  let real;
-  try { real = fs.realpathSync(full); } catch (e) { return null; }
-  const realRel = path.relative(REAL_ROOT, real);
-  if (!realRel || realRel.startsWith('..') || path.isAbsolute(realRel)) return null;
-  return isPublicRel(realRel) ? real : null;
+  /* 项目收进 依赖文件/ 之后，静态文件分成了两处：音乐库.html、data.js、
+     durations.js 在项目目录（HERE），无损/、_covers/、_lyrics/ 在库根（ROOT）。
+     两个基都试一遍：谁能在白名单内且真实路径不越界，就放行谁。 */
+  for (const base of [HERE, ROOT]) {
+    const realBase = base === HERE ? REAL_HERE : REAL_ROOT;
+    const full = path.resolve(base, rel);
+    const baseWithSep = base.endsWith(path.sep) ? base : base + path.sep;
+    if (full !== base && !full.startsWith(baseWithSep)) continue; // 防目录穿越
+    if (!isPublicRel(path.relative(base, full))) continue;
+    /* 目录联接（junction）能骗过上面那道纯字符串检查：无损/x 指向 C:\ 时，
+       前缀看着还在库内，实际读的是库外。按真实路径再判一次，
+       这样「无损/x → _logs」这种拐进敏感目录的联接也一起挡掉。 */
+    let real;
+    try { real = fs.realpathSync(full); } catch (e) { continue; }
+    const realRel = path.relative(realBase, real);
+    if (!realRel || realRel.startsWith('..') || path.isAbsolute(realRel)) continue;
+    if (isPublicRel(realRel)) return real;
+  }
+  return null;
 }
 
 /* ===== 入库 API =====
@@ -153,6 +162,8 @@ const IMP_AUDIO_RE = /\.(flac|wav|ape|m4a|mp3|dsf|dff|wv|tta|aiff|alac)$/i;
 const IMP_PLAY_RE = /\.(flac|wav|m4a|mp3|aac|ogg|opus)$/i;
 const IMP_CUE_RE = /\.cue$/i;
 const IMP_COVER_RE = /^(folder|cover|front|封面)\.(jpe?g|png|webp)$/i;
+/* 封底/内页/碟面/小册子这类图即使命名像封面也不选，避免挂错封面。 */
+const IMP_COVER_BAD_RE = /(back|封底|inner|内页|inside|disc|label|碟面|碟片|booklet|内封|rear)/i;
 const LIB = path.join(ROOT, '无损');
 
 /* 只有「本机直连」才算本地。
@@ -170,7 +181,7 @@ function isLocal(req) {
 
 /* data.js 就一句 window.LIB_DATA={…}; 只剥前缀，不碰内容 */
 function readData() {
-  const txt = fs.readFileSync(path.join(ROOT, 'data.js'), 'utf8');
+  const txt = fs.readFileSync(path.join(HERE, 'data.js'), 'utf8');
   const i = txt.indexOf('{');
   const j = txt.lastIndexOf('}');
   return { data: JSON.parse(txt.slice(i, j + 1)), text: txt };
@@ -190,7 +201,7 @@ function walkAlbum(dir, depth, prefix, out) {
     if (e.isFile()) {
       if (IMP_AUDIO_RE.test(e.name)) out.audio.push({ name: e.name, path: prefix + e.name });
       else if (IMP_CUE_RE.test(e.name)) out.cues.push(prefix + e.name);
-      else if (IMP_COVER_RE.test(e.name) && !out.cover) out.cover = e.name;
+      else if (IMP_COVER_RE.test(e.name) && !IMP_COVER_BAD_RE.test(e.name) && !out.cover) out.cover = e.name;
     } else if (e.isDirectory() && depth < 2 && !IMP_SKIP_DIRS.has(e.name)) {
       walkAlbum(path.join(dir, e.name), depth + 1, prefix + e.name + '/', out);
     }
@@ -371,7 +382,7 @@ function commitImport(rels) {
      翻文件时根本分不清哪个是程序、哪个是某天写坏前的存档。 */
   fs.mkdirSync(BAK_DIR, { recursive: true });
   const bak = path.join(BAK_DIR, 'data.js.bak-' + stamp);
-  fs.copyFileSync(path.join(ROOT, 'data.js'), bak);
+  fs.copyFileSync(path.join(HERE, 'data.js'), bak);
   for (const al of picked) data.albums.push(al);       // 只能 push 到末尾：_lyrics 分片按数组下标命名
   data.generated = day;
   const trk = picked.reduce((k, a) => k + a.tracks.length, 0);
@@ -387,7 +398,7 @@ function commitImport(rels) {
      整个库打不开（_备份/ 里虽还有备份，但恢复得手工做）。同卷改名是原子的。 */
   const tmp = path.join(BAK_DIR, 'data.js.tmp-' + process.pid);
   fs.writeFileSync(tmp, txt, 'utf8');
-  fs.renameSync(tmp, path.join(ROOT, 'data.js'));
+  fs.renameSync(tmp, path.join(HERE, 'data.js'));
   const u = data.updates.find(x => x.date === day);
   // 把写入的条目原样回给页面：页面据此就地更新，不必整页重载
   return { added: picked.length, tracks: trk, backup: '_备份/' + path.basename(bak), total: data.albums.length, update: u, albums: picked, skippedDup };
@@ -468,8 +479,8 @@ function runPy(args, done) {
   pyBusy = true;
   const { spawn } = require('child_process');
   const py = process.platform === 'win32' ? 'python' : 'python3';
-  const child = spawn(py, [path.join(ROOT, '音乐库.py'), '导入'].concat(args), {
-    cwd: ROOT,
+  const child = spawn(py, [path.join(HERE, '音乐库.py'), '导入'].concat(args), {
+    cwd: HERE,
     env: Object.assign({}, process.env, { PYTHONIOENCODING: 'utf-8' })
   });
   let out = '', err = '', finished = false;
@@ -761,6 +772,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('  局域网    http://<本机局域网IP>:' + PORT + '/');
   console.log('  Tailscale http://<节点名>.<tailnet 名>.ts.net/（配了才有）');
   console.log('  目录      ' + ROOT);
+  console.log('  项目      ' + HERE + '（代码与数据文件）');
 });
 
 process.on('uncaughtException', e => console.error('未捕获异常:', e && e.message));

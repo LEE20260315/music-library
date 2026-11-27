@@ -1,5 +1,5 @@
 <div align="center"><br><br>
-<img src="docs/assets/banner-xicheng.png" alt="Sirius · 無損音樂庫" width="720" />
+<img src="依赖文件/docs/assets/banner-xicheng.png" alt="Sirius · 無損音樂庫" width="720" />
 <br><br>
 
 # Sirius · 無損音樂庫
@@ -8,16 +8,16 @@
 <sub>― 把每一張唱片，慢慢聽完整 ―</sub>
 <br>
 
-[![Node.js](docs/assets/badge-node.svg)](https://nodejs.org/)
-[![Python](docs/assets/badge-python.svg)](https://www.python.org/)
-[![Frontend](docs/assets/badge-frontend.svg)](#法)
-[![Database](docs/assets/badge-database.svg)](#法)
-[![Access](docs/assets/badge-access.svg)](#法)
+[![Node.js](依赖文件/docs/assets/badge-node.svg)](https://nodejs.org/)
+[![Python](依赖文件/docs/assets/badge-python.svg)](https://www.python.org/)
+[![Frontend](依赖文件/docs/assets/badge-frontend.svg)](#法)
+[![Database](依赖文件/docs/assets/badge-database.svg)](#法)
+[![Access](依赖文件/docs/assets/badge-access.svg)](#法)
 
 <br>
 <sub>[序](#序) · [覽](#覽) · [器](#器) · [法](#法) · [護](#護)</sub>
 <br><br>
-<img src="docs/assets/seal-xicheng.svg" alt="西城閒人" width="56" />
+<img src="依赖文件/docs/assets/seal-xicheng.svg" alt="西城閒人" width="56" />
 <br></div>
 
 ---
@@ -36,13 +36,13 @@
 
 **封面之牆** —— 上為篩選搜尋，中為專輯封面；右側「換一批」易一組推薦，側欄則庫之足跡時間軸也。
 
-![封面牆](docs/assets/screenshot-home.png)
+![封面牆](依赖文件/docs/assets/screenshot-home.png)
 
 <sub>※ 首頁：全部 / 按藝人 / 按類型 / 按年代 / 按音質，兼可索藝人、專輯與曲目。</sub>
 
 **唱片之頁** —— 黑膠唱臂為視覺之心，曲目居中，左右兩欄為藝人介紹與專輯筆記；去頁之後，迷你條仍可續控。
 
-![播放頁](docs/assets/screenshot-player.png)
+![播放頁](依赖文件/docs/assets/screenshot-player.png)
 
 <sub>※ 播放頁：黑膠旋轉、順序 / 單曲循環 / 亂序、淡入淡出之關、歌詞之區。</sub>
 
@@ -199,7 +199,7 @@ python 音乐库.py 歌词    # 採歌詞而離線整之
 ---
 
 <div align="center">
-<img src="docs/assets/seal-xicheng.svg" alt="西城閒人" width="48" />
+<img src="依赖文件/docs/assets/seal-xicheng.svg" alt="西城閒人" width="48" />
 <br>
 <sub>紙承墨，墨載意，意馭器</sub>
 <br><sub>西城閒人 · 識</sub>

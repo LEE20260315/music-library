@@ -976,12 +976,9 @@ renderStats();renderTimeline();
    所以不会连着六张 AC/DC），再按屏幕实际大小一张张往上堆，堆满就停。
    屏幕多大、这次抽到什么，就是这批封面的全部依据。 */
 const TABS=[{k:'all',n:'全部'},{k:'artist',n:'按艺人'},{k:'genre',n:'按类型'},{k:'era',n:'按年代'},{k:'quality',n:'按音质'}];
-let curTab='all',query='',sample=[],lastPicked=new Set();
-/* 每个标签页各按一个维度分层：全部=风格，这样"随机"出来的三十张风格是散开的 */
-const TAB_KEY={
-  all:a=>a.genre||'其他',artist:a=>a.artist,genre:a=>a.genre||'其他',
-  era:a=>a.era||'未标年',quality:a=>a.quality||'未知音质'
-};
+let curTab='all',query='',sample=[],recentQueue=[];
+/* 近期冷却：最近 COOL_BATCHES 批出现过的专辑优先避开，避免连点几批又撞见同一批 */
+const COOL_BATCHES=4;
 const shuffleInPlace=arr=>{for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));const t=arr[i];arr[i]=arr[j];arr[j]=t;}return arr;};
 $('tabs').innerHTML=TABS.map(t=>'<button class="tab'+(t.k===curTab?' on':'')+'" data-k="'+t.k+'">'+t.n+'</button>').join('');
 $('tabs').onclick=e=>{
@@ -998,30 +995,23 @@ function pool(){
 function sampleBatch(n){
   const list=pool();
   if(list.length<=n)return list.slice();
-  const key=TAB_KEY[curTab]||TAB_KEY.all;
-  const buckets=new Map();
-  for(const al of list){const k=key(al)||'其他';if(!buckets.has(k))buckets.set(k,[]);buckets.get(k).push(al);}
-  // 每层先洗一遍，再把层的顺序也打乱：轮着从各层取一张
-  const keys=shuffleInPlace(Array.from(buckets.keys()));
-  for(const k of keys)shuffleInPlace(buckets.get(k));
+  // 整库 Fisher-Yates 洗牌后顺序取，保证每张专辑被抽中概率均等；
+  // 先取近期冷却之外的，不够再从冷却里补，避免换一批又撞上刚看过的。
+  const recent=new Set();
+  recentQueue.forEach(s=>s.forEach(i=>recent.add(i)));
+  const rest=list.slice();
+  shuffleInPlace(rest);
   const out=[],taken=new Set();
-  const push=al=>{const i=IDX.get(al);if(taken.has(i))return false;taken.add(i);out.push(al);return true;};
-  // 第一圈：挑上一批没出现过的，换一批才不会"换了个寂寞"
-  for(const pass of [0,1]){
-    let added=true;
-    while(out.length<n&&added){
-      added=false;
-      for(const k of keys){
-        if(out.length>=n)break;
-        const b=buckets.get(k);
-        while(b&&b.length){
-          const al=b.pop();
-          if(pass===0&&lastPicked.has(IDX.get(al)))continue;
-          if(push(al)){added=true;break;}
-        }
-      }
-    }
+  for(const al of rest){
     if(out.length>=n)break;
+    const i=IDX.get(al);
+    if(taken.has(i))continue;
+    if(!recent.has(i)){taken.add(i);out.push(al);}
+  }
+  for(const al of rest){
+    if(out.length>=n)break;
+    const i=IDX.get(al);
+    if(!taken.has(i)){taken.add(i);out.push(al);}
   }
   return out;
 }
@@ -1147,7 +1137,8 @@ function layoutWall(){
     }
   }
   for(let i2=n;i2<cards.length;i2++)cards[i2].style.display='none';
-  lastPicked=new Set(cards.slice(0,n).map(el=>+el.dataset.i));
+  recentQueue.push(new Set(cards.slice(0,n).map(el=>+el.dataset.i)));
+  if(recentQueue.length>COOL_BATCHES)recentQueue.shift();
 }
 /* 「换一批」书签的位置全交给 CSS（.content 里 absolute + right:-26px），
    以前那个用 getBoundingClientRect 算 right 的函数只会因为 zoom 双重缩放而漂移，已经删掉。 */
@@ -1588,35 +1579,52 @@ function parseLrcText(s){
   out.sort((a,b)=>a.t-b.t);
   return out;
 }
-function autoSearchLyrics(t,artist){
+const LYR_CACHE_TTL=7*24*3600*1000;
+function readLyrCache(key){
+  try{
+    const c=localStorage.getItem(key);
+    if(!c)return null;
+    const v=JSON.parse(c);
+    if(v&&v.v){ // 新格式：{v: 歌词, ts: 时间戳}，过期丢弃
+      if(Date.now()-v.ts>LYR_CACHE_TTL)return null;
+      return v.v;
+    }
+    return v; // 旧格式：数组或 LRC 字符串
+  }catch(e){return null;}
+}
+function autoSearchLyrics(t,artist,album){
   if(t._lyrSearched)return;
   t._lyrSearched=true;
   /* 这次请求是替哪一首发的。歌词站慢的时候用户早切走了，
      回来直接写 #lyrics 就会把别人的歌词盖到当前这首上（还会串一首到下一首）。 */
   const stillHere=()=>cur&&cur.tracks[curIdx]===t;
   const key='dsh_lyr_'+normLyric(artist)+'_'+normLyric(t.n);
-  try{const c=localStorage.getItem(key);if(c){t.lyr=JSON.parse(c);renderLyrics(t.lyr);return;}}catch(e){}
+  const cached=readLyrCache(key);
+  if(cached){t.lyr=Array.isArray(cached)?cached:parseLrcText(cached);renderLyrics(t.lyr);return;}
   $('lyrics').innerHTML='<div class="lyr-empty">我找找看歌词在哪里…</div>';
-  const url='https://lrclib.net/api/search?track_name='+encodeURIComponent(t.n)+'&artist_name='+encodeURIComponent(artist);
+  let url='https://lrclib.net/api/search?track_name='+encodeURIComponent(t.n)+'&artist_name='+encodeURIComponent(artist);
+  if(album)url+='&album_name='+encodeURIComponent(album);
   fetch(url).then(r=>{
     if(r.status===429)throw new Error('rate');
     return r.json();
   }).then(res=>{
     if(!stillHere())return;
     if(!Array.isArray(res))throw 0;
-    const na=normLyric(artist),nt=normLyric(t.n);
+    const na=normLyric(artist),nt=normLyric(t.n),nal=normLyric(album);
     let best=null,bs=-1;
     res.forEach(x=>{
       if(!x.syncedLyrics)return;
-      const xa=normLyric(x.artistName),xt=normLyric(x.trackName);
-      const sc=(xa===na?2:(xa&&(na.includes(xa)||xa.includes(na))?1:0))+(xt===nt?2:(xt&&(nt.includes(xt)||xt.includes(nt))?1:0));
+      const xa=normLyric(x.artistName),xt=normLyric(x.trackName),xl=normLyric(x.albumName);
+      let sc=(xa===na?2:(xa&&(na.includes(xa)||xa.includes(na))?1:0))
+            +(xt===nt?2:(xt&&(nt.includes(xt)||nt.includes(xt))?1:0));
+      if(nal&&xl){sc+=(xl===nal||xl.includes(nal)||nal.includes(xl))?1:-1;}
       if(sc>bs){bs=sc;best=x;}
     });
-    if(bs>=3){
+    if(bs>=4){
       const ly=parseLrcText(best.syncedLyrics);
       if(ly.length){
         t.lyr=ly;
-        try{localStorage.setItem(key,JSON.stringify(ly));}catch(e){}
+        try{localStorage.setItem(key,JSON.stringify({v:ly,ts:Date.now()}));}catch(e){}
         renderLyrics(ly);
         $('now').innerHTML+=' <span style="color:var(--terra)">· 歌词找到啦</span>';
         return;
@@ -1663,10 +1671,8 @@ function lyricFor(al,i){
     lines=Array.isArray(pack[i])?pack[i]:parseLrcText(pack[i]);
   }
   if(!lines||!lines.length){
-    try{
-      const c=localStorage.getItem('dsh_lyr_'+normLyric(al.artist)+'_'+normLyric(t.n));
-      if(c){const v=JSON.parse(c);lines=Array.isArray(v)?v:parseLrcText(v);}
-    }catch(e){}
+    const cached=readLyrCache('dsh_lyr_'+normLyric(al.artist)+'_'+normLyric(t.n));
+    if(cached)lines=Array.isArray(cached)?cached:parseLrcText(cached);
   }
   if(lines&&lines.length){t.lyr=lines;box.set(i,lines);return lines;}
   return null;
@@ -1678,7 +1684,7 @@ function renderLyrics(lines){
     // 分片还在下载：先别急着联网搜，等 onload 回来再判断
     if(ai!=null&&LYR_SRC[ai]==='loading'){$('lyrics').innerHTML='<div class="lyr-empty">歌词加载中…</div>';return;}
     $('lyrics').innerHTML='<div class="lyr-empty">我找找看歌词在哪里…</div>';
-    if(cur&&cur.tracks[curIdx]&&cur.artist)autoSearchLyrics(cur.tracks[curIdx],cur.artist);
+    if(cur&&cur.tracks[curIdx]&&cur.artist)autoSearchLyrics(cur.tracks[curIdx],cur.artist,cur.album);
     return;
   }
   const box=$('lyrics');
@@ -2893,6 +2899,43 @@ $('importBtn').onclick=()=>{
 };
 build();
 
+</script>
+
+<!-- 双击 file:// 打开时的处理：服务在就跳到真实地址，没在就显示指引 -->
+<script>
+(function () {
+  'use strict';
+  if (location.protocol !== 'file:') return;   // http(s) 下是正常播放器，不做任何事
+  var TARGET = 'http://127.0.0.1:8099/';
+  var timer = setTimeout(showGuide, 1800);
+  function showGuide() {
+    if (document.getElementById('__file_guide')) return;
+    var box = document.createElement('div');
+    box.id = '__file_guide';
+    box.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#F5F1E8;color:#2E2A24;display:flex;align-items:center;justify-content:center;padding:24px;font-family:"Microsoft YaHei",sans-serif';
+    box.innerHTML = '<div style="max-width:600px;background:#fff;border:1px solid #DCD2BF;border-radius:14px;padding:36px 40px;box-shadow:0 12px 40px rgba(92,68,44,.18);text-align:center">' +
+      '<div style="font:600 12px/1.4 Georgia,serif;letter-spacing:.3em;color:#B5654A;margin-bottom:14px">SIRIUS · 無損音樂庫</div>' +
+      '<h2 style="font-family:SimSun,serif;font-size:26px;margin:0 0 14px">请用真实地址打开</h2>' +
+      '<p style="color:#6E6558;line-height:1.8;margin:0 0 20px">这个 HTML 只是播放器页面，双击打开拿不到曲库数据。<br>请访问本地服务器地址：</p>' +
+      '<a href="' + TARGET + '" style="display:inline-block;background:#B5654A;color:#fff;text-decoration:none;padding:12px 28px;border-radius:999px;font-size:16px;font-weight:600">' + TARGET + '</a>' +
+      '<p id="__guide_status" style="color:#9A8F7E;font-size:12px;margin:16px 0 0">正在检测服务…</p>' +
+      '<div style="margin-top:20px;padding-top:16px;border-top:1px solid #DCD2BF;color:#6E6558;font-size:13px;text-align:left;line-height:1.9">' +
+      '<b style="color:#2E2A24">如果上面的地址打不开</b>，说明音乐服务没启动：<br>' +
+      '双击 E:\\01-音乐\\依赖文件\\启动器\\启动全部.vbs，等约 10 秒后再打开。' +
+      '</div></div>';
+    document.body.appendChild(box);
+    var status = document.getElementById('__guide_status');
+    var p2 = new Image();
+    p2.onload = function () { if (status) status.textContent = '服务已就绪，点击上面的地址进入'; };
+    p2.onerror = function () { if (status) status.textContent = '服务未启动，请按下方说明启动'; };
+    p2.src = TARGET + '_covers/c0000.jpg?probe=' + (Date.now() + 1);
+  }
+  // Image 探测：有 HTTP 响应就 onload（跳到服务器），连不上就 onerror（显示指引）
+  var probe = new Image();
+  probe.onload = function () { clearTimeout(timer); location.replace(TARGET); };
+  probe.onerror = function () { clearTimeout(timer); showGuide(); };
+  probe.src = TARGET + '_covers/c0000.jpg?probe=' + Date.now();
+})();
 </script>
 </body>
 </html>

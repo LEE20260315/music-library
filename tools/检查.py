@@ -21,7 +21,7 @@ from datetime import datetime
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
-TARGET = HERE / "音乐库.html"
+TARGET = HERE.parent / "音乐库.html"   # 音乐库.html 留在库根
 LYRIC_DIR = HERE / "_lyrics"
 BAK_DIR = HERE / "_备份"          # --backup 的副本也放进备份目录，别堆在库根目录
 

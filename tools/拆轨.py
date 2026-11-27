@@ -27,9 +27,10 @@ r"""按 CUE 把整轨音频拆成单曲，放进 无损/<艺人>/<专辑>/。
 import argparse, io, json, os, re, shutil, subprocess, sys, tempfile
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # 项目目录（依赖文件）
+ROOT = os.path.dirname(HERE)                                        # 音乐库根目录：无损/ 在这儿
 LIB = os.path.join(ROOT, '无损')
-RAW = os.path.join(ROOT, '_原盘')
+RAW = os.path.join(HERE, '_原盘')
 AUDIO_EXT = {'.wav', '.ape', '.flac', '.wv', '.tta', '.aiff', '.m4a', '.mp3', '.dff', '.dsf'}
 SKIP_DIRS = {'_covers', '_lyrics', '.git', '__pycache__', 'System Volume Information', '$RECYCLE.BIN'}
 

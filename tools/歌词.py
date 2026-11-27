@@ -8,13 +8,19 @@
   python 音乐库.py 歌词 --jobs 4        # 全局并发，默认 4（上限 4）
   python 音乐库.py 歌词 --album 123     # 调试单张专辑（专辑下标）
   python 音乐库.py 歌词 --retry-miss    # 重跑 _state.json 中记为 miss 的曲目
+  python 音乐库.py 歌词 --recheck-hit   # 重跑存量 hit，重新校验，不合格降级 miss
+  python 音乐库.py 歌词 --clean         # 本地清洗：清越界 state、剔除无效 hit，不联网
   python 音乐库.py 歌词 --min-score 3   # lrclib 匹配分阈值，默认 3
 
 匹配顺序：lrclib（带专辑名搜索 → miss 且有专辑名时去掉专辑名再搜一次）
         → 网易云（search 取第一条曲名证据通过的候选 → 取其歌词）。
+校验口径：曲名/艺人相等为强证据；专辑名互不包含则否决降权；歌名实词应出现在
+歌词中；歌词时长与音频时长偏差过大降权；纯器乐标记、无时间戳文本不算命中。
 Ctrl+C 随时中断：进度落盘 _lyrics/_state.json，重跑自动续。
 """
 import argparse
+import collections
+import hashlib
 import json
 import os
 import re
@@ -31,6 +37,8 @@ LYR_DIR = os.path.join(BASE_DIR, "_lyrics")
 STATE_PATH = os.path.join(LYR_DIR, "_state.json")
 REPORT_PATH = os.path.join(LYR_DIR, "_report.md")
 DATA_PATH = os.path.join(BASE_DIR, "data.js")
+DUR_PATH = os.path.join(BASE_DIR, "durations.js")
+BAK_DIR = os.path.join(BASE_DIR, "_备份")
 
 API = "https://lrclib.net/api/search"
 LIB_PREFIX = "window.LIB_DATA="
@@ -56,6 +64,32 @@ NOISE_PAT = re.compile(
     re.I,
 )
 FEAT_PAT = re.compile(r"\s*(?:feat|ft)\.?\s+.*$", re.I)
+TS_FULL = re.compile(r"\[(\d{1,2}):(\d{2}(?:\.\d+)?)\]")
+INST_PAT = re.compile(
+    r"instrumental|纯音乐|没有填词|无歌词|伴奏|纯音乐，请您欣赏|no lyrics", re.I
+)
+# 曲名里不参与内容比对的弱词（功能词 + 高频口语/泛词，避免偶然命中误判）
+STOP_WORDS = {"the", "a", "an", "of", "and", "to", "in", "on", "for", "my",
+              "me", "you", "your", "is", "it", "feat", "ft", "live", "remix",
+              "up", "out", "oh", "yeah", "ya", "la", "na", "no", "so", "do",
+              "be", "but", "not", "what", "when", "why", "how", "all", "can",
+              "will", "just", "like", "know", "let", "get", "got", "go", "going",
+              "come", "back", "now", "here", "there", "one", "two", "day", "night",
+              "time", "way", "life", "love", "heart", "baby", "girl", "boy",
+              "world", "away", "never", "always", "still", "even", "down", "over",
+              "under", "again", "more", "most", "much", "very", "really", "good",
+              "morning", "little", "school", "its", "im", "dont", "cant", "wont",
+              "thats", "theres", "youre", "ive", "id", "ill", "shes", "hes",
+              "lets", "cause", "who", "whom", "whose", "which", "that", "this",
+              "these", "those", "am", "are", "was", "were", "has", "have", "had",
+              "his", "her", "hers", "him", "our", "ours", "their", "theirs",
+              "they", "them", "we", "us", "he", "she", "or", "if", "then",
+              "than", "too", "own", "same", "could", "would", "should", "may",
+              "might", "must", "shall", "about", "after", "before", "between",
+              "through", "during", "above", "below", "off", "into", "onto", "upon",
+              "within", "without", "along", "across", "among", "toward", "towards",
+              "per", "via", "yet", "also", "only", "ever", "every", "each", "both",
+              "few", "many", "such", "another", "song", "music", "feat"}
 
 
 def norm(s):
@@ -70,8 +104,70 @@ def norm(s):
     return re.sub(r"\s+", " ", s).strip()
 
 
+def last_ts(lrc):
+    """歌词最后一条时间戳（秒）；没有返回 None。"""
+    ts = TS_FULL.findall(lrc)
+    if not ts:
+        return None
+    return int(ts[-1][0]) * 60 + float(ts[-1][1])
+
+
+def title_terms(tn):
+    """从归一化曲名提取可比对实词：英文长度≥3 的非停用词；中文连续串。"""
+    if not tn:
+        return []
+    words = [w for w in re.split(r"\s+", tn) if len(w) >= 3 and w not in STOP_WORDS]
+    zh = re.findall(r"[\u4e00-\u9fff]{2,}", tn)
+    return words + zh
+
+
+def term_hits(tn, lrc):
+    """返回 (命中实词, 全部实词)，供串歌校验逐首比对使用。"""
+    terms = title_terms(tn)
+    if not terms:
+        return [], []
+    body = re.sub(r"\[.*?\]", "", lrc).lower()
+    body = re.sub(r"[^\w\u4e00-\u9fff]+", " ", body)
+    hit = [t for t in terms if t in body]
+    return hit, terms
+
+
+def content_match(tn, lrc):
+    """歌名实词是否出现在歌词正文；无实词可比对时不否决（返回 True）。"""
+    hit, terms = term_hits(tn, lrc)
+    if not terms:
+        return True
+    return bool(hit)
+
+
+def is_instrumental(lrc):
+    """纯器乐/伴奏标记文本：正文很短且命中器乐关键词。"""
+    body = re.sub(r"\[.*?\]", "", lrc).strip()
+    return len(body) <= 40 and bool(INST_PAT.search(body))
+
+
+def load_durations():
+    if not os.path.exists(DUR_PATH):
+        return {}
+    try:
+        raw = open(DUR_PATH, encoding="utf-8").read().strip()
+        if raw.startswith("window.LIB_DUR="):
+            raw = raw[len("window.LIB_DUR="):].rstrip(";")
+        return json.loads(raw)
+    except (OSError, ValueError):
+        return {}
+
+
+def dur_key(rel, track_p):
+    """durations.js 的键：rel 去掉 无损/ 前缀，拼文件名。"""
+    r = (rel or "").replace("\\", "/")
+    if r.startswith("无损/"):
+        r = r[len("无损/"):]
+    return r + "/" + track_p
+
+
 def score_cand(c, tn, an, aln):
-    """曲名完全相同 +2 / 互相包含 +1；艺人同上；专辑名互相包含 +1。"""
+    """曲名完全相同 +2 / 互相包含 +1；艺人同上；专辑名互相包含 +1，互不包含 -2。"""
     s = 0
     ct = norm(c.get("trackName"))
     ca = norm(c.get("artistName"))
@@ -86,13 +182,18 @@ def score_cand(c, tn, an, aln):
             s += 2
         elif ca in an or an in ca:
             s += 1
-    if aln and cal and (cal in aln or aln in cal):
-        s += 1
+    if aln and cal:
+        if cal in aln or aln in cal:
+            s += 1
+        else:
+            s -= 2
     return s
 
 
-def decide(results, tn, an, aln, min_score):
-    """lrclib 候选择优：选最高分且 >= 阈值的；instrumental / 纯歌词 / 无时间戳一律不算命中。"""
+def decide(results, tn, an, aln, min_score, dur=None):
+    """lrclib 候选择优：选最高分且 >= 阈值的。
+    instrumental / 器乐标记 / 纯文本 / 无时间戳一律不算命中；
+    歌名实词未入歌词、时长偏差过大则降权或跳过。"""
     best_s, best_lrc = -1, None
     for c in results or []:
         if c.get("instrumental"):
@@ -100,7 +201,17 @@ def decide(results, tn, an, aln, min_score):
         lrc = (c.get("syncedLyrics") or "").strip()
         if not lrc or not TS_PAT.search(lrc):
             continue
+        if is_instrumental(lrc):
+            continue
         s = score_cand(c, tn, an, aln)
+        if not content_match(tn, lrc):
+            s -= 2
+        last = last_ts(lrc)
+        if dur and last is not None:
+            if last > dur + 30:
+                continue
+            if dur > 120 and last < dur * 0.4:
+                s -= 2
         if s > best_s:
             best_s, best_lrc = s, lrc
     if best_s >= min_score:
@@ -144,12 +255,12 @@ def fetch_search(track, artist, album):
     return http_get_json(API + "?" + qs, HDRS)
 
 
-def lrclib_decide(t, a, al, tn, an, aln, min_score):
+def lrclib_decide(t, a, al, tn, an, aln, min_score, dur=None):
     """lrclib 路径：先带专辑名搜；仍 miss 且有专辑名时，去掉专辑名再搜一次。"""
-    status, lrc = decide(fetch_search(t, a, al), tn, an, aln, min_score)
+    status, lrc = decide(fetch_search(t, a, al), tn, an, aln, min_score, dur)
     if status == "hit" or not al:
         return status, lrc
-    return decide(fetch_search(t, a, ""), tn, an, aln, min_score)
+    return decide(fetch_search(t, a, ""), tn, an, aln, min_score, dur)
 
 
 def ne_search(track, artist):
@@ -213,7 +324,8 @@ def ne_decide(track, artist, tn, an):
     if pick is None or pick.get("id") is None:
         return "miss", None
     text = ne_lyric(pick.get("id"))
-    if text and TS_PAT.search(text):
+    if (text and TS_PAT.search(text) and not is_instrumental(text)
+            and content_match(tn, text)):
         return "hit", text
     return "miss", None
 
@@ -221,9 +333,9 @@ def ne_decide(track, artist, tn, an):
 def process_track(item, min_score):
     """单首完整链路：lrclib（带专辑名 → 无专辑名）→ 网易云；全部网络异常都在
     http_get_json 内消化，不会抛出。返回 (ai, ti, status, lrc, src)。"""
-    ai, ti, t, a, al = item
+    ai, ti, t, a, al, dur = item
     tn, an, aln = norm(t), norm(a), norm(al)
-    status, lrc = lrclib_decide(t, a, al, tn, an, aln, min_score)
+    status, lrc = lrclib_decide(t, a, al, tn, an, aln, min_score, dur)
     if status == "hit":
         return ai, ti, "hit", lrc, "lrclib"
     status, lrc = ne_decide(t, a, tn, an)
@@ -363,6 +475,146 @@ def fmt_mmss(seconds):
     return "%02d:%02d" % (seconds // 60, seconds % 60)
 
 
+def clean_main(albums, state, hits, durs):
+    """本地清洗（不联网）：清越界 state、剔除无效 hit、修正 hit 缺分片。"""
+    done = state["done"]
+    os.makedirs(BAK_DIR, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    bak = os.path.join(BAK_DIR, "_state.json.bak-" + stamp)
+    try:
+        shutil_copy(STATE_PATH, bak)
+    except OSError:
+        bak = ""
+
+    # 1) 越界 / 非法 key 删除
+    stale = []
+    for key in list(done.keys()):
+        try:
+            ai, ti = map(int, key.split(":"))
+        except ValueError:
+            stale.append(key)
+            continue
+        if ai >= len(albums) or ti >= len(albums[ai].get("tracks") or []):
+            stale.append(key)
+    for key in stale:
+        del done[key]
+
+    # 2) 分片条目有效性校验：无时间戳 / 少于 3 行 / 器乐标记 → 降级 miss 并移出分片；
+    #    下标越界的条目直接剔除，不回写 state（避免越界 key 被重新加回）。
+    invalid = []
+    for ai in list(hits.keys()):
+        if ai >= len(albums):
+            del hits[ai]
+            continue
+        obj = hits[ai]
+        n_tracks = len(albums[ai].get("tracks") or [])
+        for ti_s in list(obj.keys()):
+            ti = int(ti_s)
+            if ti >= n_tracks:
+                del obj[ti_s]
+                done.pop("%d:%d" % (ai, ti), None)
+                continue
+            lrc = obj[ti_s]
+            if isinstance(lrc, list):
+                lrc = "\n".join(str(x) for x in lrc)
+            if not isinstance(lrc, str):
+                lrc = str(lrc)
+            n_lines = len([x for x in lrc.splitlines() if x.strip()])
+            bad = (not TS_PAT.search(lrc)) or n_lines < 3 or is_instrumental(lrc)
+            if bad:
+                del obj[ti_s]
+                done["%d:%d" % (ai, ti)] = "miss"
+                invalid.append((ai, ti))
+        if not obj:
+            del hits[ai]
+
+    # 2b) 同专辑多曲共用同一文本：逐首做歌名实词校验。实词全未命中，或命中率不足
+    #     一半且无长实词（≥4 字母）命中的，判为串歌（同一段歌词挂到了别的曲子上），
+    #     剔除并降级 miss；无可比对实词的不否决。兜底：组内若全部判废，保留命中率
+    #     最高的一首，避免把正确歌词整组误删。
+    shared_bad = []
+    for ai in list(hits.keys()):
+        obj = hits[ai]
+        tracks = albums[ai].get("tracks") or []
+        by_text = collections.defaultdict(list)
+        for ti_s, lrc in obj.items():
+            if isinstance(lrc, list):
+                lrc = "\n".join(str(x) for x in lrc)
+            h = hashlib.md5(re.sub(r"\[.*?\]", "", str(lrc)).encode()).hexdigest()
+            by_text[h].append((int(ti_s), str(lrc)))
+        for items in by_text.values():
+            if len(items) < 2:
+                continue
+            score = {}
+            for ti, lrc in items:
+                if ti >= len(tracks):
+                    continue
+                hit, terms = term_hits(norm(tracks[ti].get("n")), lrc)
+                score[ti] = (len(hit), len(terms))
+            drop = []
+            for ti, (nh, nt) in score.items():
+                if nt == 0:
+                    continue
+                strong = any(len(t) >= 4 for t in hit)
+                ratio = nh / nt
+                if nh == 0 or (ratio < 0.5 and not strong):
+                    drop.append(ti)
+            if len(drop) == len(score) and score:
+                keep = max(score, key=lambda k: (score[k][0], -score[k][1]))
+                drop = [t for t in drop if t != keep]
+            for ti in drop:
+                obj.pop(str(ti), None)
+                done["%d:%d" % (ai, ti)] = "miss"
+                shared_bad.append((ai, ti))
+        if not obj:
+            del hits[ai]
+
+    # 3) state 记 hit 但分片缺该曲 → 记 miss
+    fixed_missing = 0
+    for key, st in list(done.items()):
+        if st != "hit":
+            continue
+        ai, ti = map(int, key.split(":"))
+        if not (ai in hits and str(ti) in hits[ai]):
+            done[key] = "miss"
+            fixed_missing += 1
+
+    # 4) 删掉已空的分片文件
+    removed_shards = 0
+    if os.path.isdir(LYR_DIR):
+        for n in os.listdir(LYR_DIR):
+            m = re.fullmatch(r"a(\d+)\.js", n)
+            if not m:
+                continue
+            if int(m.group(1)) not in hits:
+                try:
+                    os.remove(os.path.join(LYR_DIR, n))
+                    removed_shards += 1
+                except OSError:
+                    pass
+
+    save_state(state)
+    # 重写保留下来的分片（剔除条目落盘）
+    for ai in hits:
+        write_shard(ai, hits[ai])
+    write_report(state, albums)
+
+    print("清洗完成（备份: %s）" % (bak or "无"))
+    print("- 越界/非法 state 记录删除: %d 条" % len(stale))
+    print("- 无效 hit 降级 miss 并移出分片: %d 首" % len(invalid))
+    print("- 串歌共用文本剔除降级: %d 首" % len(shared_bad))
+    print("- hit 缺分片修正为 miss: %d 首" % fixed_missing)
+    print("- 清空后删除的分片文件: %d 个" % removed_shards)
+    g_hits = sum(1 for v in done.values() if v == "hit")
+    print("- 累计已处理 %d 项，命中 %d / 未命中 %d" % (len(done), g_hits, len(done) - g_hits))
+    return 0
+
+
+def shutil_copy(src, dst):
+    import shutil
+    shutil.copy2(src, dst)
+
+
 def main():
     for stream in (sys.stdout, sys.stderr):
         try:
@@ -381,11 +633,16 @@ def main():
                     help="lrclib 匹配分阈值（默认 3）")
     ap.add_argument("--retry-miss", action="store_true",
                     help="重跑 _state.json 中记为 miss 的曲目（先 lrclib 再网易云）")
+    ap.add_argument("--recheck-hit", action="store_true",
+                    help="重跑存量 hit，重新过匹配校验，不合格降级 miss 并移出分片")
+    ap.add_argument("--clean", action="store_true",
+                    help="本地清洗：清越界 state、剔除无效 hit，不联网")
     args = ap.parse_args()
     args.jobs = max(1, min(args.jobs, 4))
 
     albums = load_lib()
     total_tracks = sum(len(a.get("tracks") or []) for a in albums)
+    durs = load_durations()
     os.makedirs(LYR_DIR, exist_ok=True)
     for stale in os.listdir(LYR_DIR):
         if stale.endswith(".tmp"):
@@ -397,6 +654,9 @@ def main():
     state = load_state()
     done = state["done"]
     hits = load_shards()
+
+    if args.clean:
+        return clean_main(albums, state, hits, durs)
 
     if args.album is not None:
         if not (0 <= args.album < len(albums)):
@@ -411,7 +671,11 @@ def main():
     items = []
     for ai, ti in scope:
         key = "%d:%d" % (ai, ti)
-        if args.retry_miss:
+        if args.recheck_hit:
+            if done.get(key) != "hit":
+                skipped += 1
+                continue
+        elif args.retry_miss:
             if done.get(key) != "miss":
                 skipped += 1
                 continue
@@ -420,12 +684,17 @@ def main():
             continue
         a = albums[ai]
         t = (a.get("tracks") or [])[ti]
-        items.append((ai, ti, t.get("n") or "", a.get("artist") or "", a.get("album") or ""))
+        dur = durs.get(dur_key(a.get("rel"), t.get("p")))
+        items.append((ai, ti, t.get("n") or "", a.get("artist") or "",
+                      a.get("album") or "", dur))
     if args.limit is not None and args.limit >= 0:
         items = items[: args.limit]
 
     print("库: %d 张专辑 / %d 首曲目" % (len(albums), total_tracks))
-    if args.retry_miss:
+    if args.recheck_hit:
+        print("重校模式：仅重跑存量 hit，本次重校 %d 项 / 跳过 %d 项（--jobs %d）"
+              % (len(items), skipped, args.jobs), flush=True)
+    elif args.retry_miss:
         print("重试模式：仅重跑 miss 项（命中保持不变），本次重试 %d 项 / 跳过 %d 项（--jobs %d）"
               % (len(items), skipped, args.jobs), flush=True)
     else:
@@ -458,7 +727,13 @@ def main():
                 if src in src_hits:
                     src_hits[src] += 1
                 hits.setdefault(ai, {})[str(ti)] = lrc
-                touched.add(ai)
+            else:
+                # 重校时旧 hit 被降级：从分片剔除该曲；普通模式此处本就无条目
+                if ai in hits:
+                    hits[ai].pop(str(ti), None)
+                    if not hits[ai]:
+                        del hits[ai]
+            touched.add(ai)
             if processed % 50 == 0:
                 checkpoint(state, hits, touched)
                 touched.clear()
