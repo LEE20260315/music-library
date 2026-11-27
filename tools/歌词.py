@@ -66,7 +66,51 @@ NOISE_PAT = re.compile(
 FEAT_PAT = re.compile(r"\s*(?:feat|ft)\.?\s+.*$", re.I)
 TS_FULL = re.compile(r"\[(\d{1,2}):(\d{2}(?:\.\d+)?)\]")
 INST_PAT = re.compile(
-    r"instrumental|纯音乐|没有填词|无歌词|伴奏|纯音乐，请您欣赏|no lyrics", re.I
+    r"instrumental|纯音乐|没有填词|无歌词|伴奏|纯音乐，请您欣赏|纯音乐，请欣赏|"
+    r"纯音乐 请欣赏|暂无\s*歌词|no lyrics|「?mute」?", re.I
+)
+# 元信息 / 版权署名 / 播放器水印行（不算人声唱词）
+META_LINE_RE = re.compile(
+    r"^\s*(作词|作曲|编曲|制作人|监制|出品|发行|版权|录音|混音|母带|和声|旁白|"
+    r"录音室|工作室|吉他|钢琴|贝斯|鼓|弦乐|二胡|古筝|笛|箫|琵琶|提琴|萨克斯|"
+    r"指挥|演唱|合声|演唱合声|制作|后期|顾问|协力|词曲|词：|曲：|"
+    r"lyricist|composer|arranger|producer|mixer|master|recorded|engineer|vocals?|"
+    r"guitar|piano|drums|bass|strings?|songwriter|published|copyright|℗|©|"
+    r"artist|album|title|album time|lrc powered|sp:|lp:|recorded|published by)\b",
+    re.I,
+)
+# 乐曲解说/赏析文案（整张是乐曲介绍，无人声唱词）
+COMMENTARY_RE = re.compile(
+    r"管弦乐《|这是一首|作品创作于|作曲家以|反复回味|单乐章|乐曲介绍|乐曲赏析|"
+    r"选自《|专辑选曲|曲\s*\\|^\s*─+", re.I,
+)
+# 乐章标记 / 速度标记
+MOV_RE = re.compile(
+    r"\b(I|II|III|IV|V|VI|VII|VIII)\b[.,]|"
+    r"Allegro|Adagio|Andante|Largo|Larghetto|Presto|Moderato|Vivace|Grave|"
+    r"Affettuoso|Maestoso|Con Moto|Non Troppo|Espressivo|Cantabile|Scherzando|"
+    r"Allegretto|Molto|Giusto|Recitativo|Serioso|Con Brio|Con Grazia|Andantino", re.I,
+)
+OPUS_RE = re.compile(
+    r"\b(Op\.?|BWV|RV|Sz\.?|Hob\.?|K\.\s*\d|D\.\s*\d|MWV|No\.?\s*\d|W1?\d)\b", re.I,
+)
+GENRE_RE = re.compile(
+    r"\b(Concerto|Sonata|Symphony|Sinfonia|String Quartet|Quartet|Trio|Serenade|"
+    r"Overture|Ouverture|Suite|Variations|Etude|Nocturne|Prelude|Fugue|Fuga|"
+    r"Allemande|Courante|Sarabande|Gigue|Bourree|Menuet|Minuet|Scherzo|Toccata|"
+    r"Rondo|Intermezzo|Cantata|Mass|Kyrie|Sanctus|Oratorio|Fantasia|Capriccio|"
+    r"Partita|Concertino|Divertimento|Sinfonietta|Concert)\b", re.I,
+)
+INST_INST_RE = re.compile(
+    r"\b(Piano|Violin|Viola|Cello|Guitar|Flute|Harp|Horn|Organ|Oboe|Clarinet|"
+    r"Bassoon|Trumpet|Strings?|Bandoneon|Erhu|Harpsichord)\b[^\n]{0,30}"
+    r"(Concerto|Sonata|Solo|Quartet|Trio|Sonatas|Variations|Partita|Concert)", re.I,
+)
+# 中文器乐体裁/乐器独奏
+CN_INST_RE = re.compile(
+    r"协奏曲|奏鸣曲|交响曲|练习曲|变奏曲|即兴曲|间奏曲|弦乐四重奏|二胡齐奏|二胡协奏|"
+    r"古筝独奏|胡琴|笛子独奏|琵琶|琴箫|民族管弦乐|管弦乐合奏|乐队大合奏|"
+    r"扬琴琵琶|古琴|独奏|齐奏|协奏|合奏", re.I,
 )
 # 曲名里不参与内容比对的弱词（功能词 + 高频口语/泛词，避免偶然命中误判）
 STOP_WORDS = {"the", "a", "an", "of", "and", "to", "in", "on", "for", "my",
@@ -140,10 +184,59 @@ def content_match(tn, lrc):
     return bool(hit)
 
 
+def lyric_lines(lrc):
+    """剥掉方括号时间戳/标注与空行，返回有效行列表（未做元信息过滤）。"""
+    out = []
+    for ln in str(lrc).splitlines():
+        t = re.sub(r"\[[^\]]*\]", "", ln).strip()
+        t = re.sub(r"^[\s.:\]\[\-–—,，]+", "", t).strip()
+        if t:
+            out.append(t)
+    return out
+
+
+def is_placeholder(lrc):
+    """无效歌词：占位短语、纯元信息/版权署名水印、乐曲解说残片或空正文。"""
+    lines = lyric_lines(lrc)
+    if not lines:
+        return True
+    body = " ".join(lines)
+    if INST_PAT.search(body) and len(body) <= 40:
+        return True
+    # 全部非空行都是元信息 / 署名 / 水印
+    if all(META_LINE_RE.search(t) for t in lines):
+        return True
+    # 乐曲解说文案：命中解说特征且无一条成句人声唱词
+    vocal = [t for t in lines if not META_LINE_RE.search(t)]
+    if COMMENTARY_RE.search(body) and not vocal:
+        return True
+    return False
+
+
+def title_is_inst(tn):
+    """曲名是否为明确器乐 / 伴奏 / 独奏协奏曲目（强特征，不含 lullaby/waltz/theme 等弱词）。"""
+    if not tn:
+        return False
+    s = str(tn)
+    # 明确伴奏 / 器乐标注；排除“扬琴伴奏：某某”这类乐器伴奏说明
+    if re.search(r"\[?Instrumental\]?|\(instrumental\)|\(\s*伴奏\s*\)|（\s*伴奏\s*）|"
+                 r"伴奏版|无伴奏版|演奏版|纯音乐", s, re.I):
+        if not re.search(r"(扬琴|钢琴|吉他|二胡|古筝|笛|箫|琵琶|提琴|弦乐)\s*伴奏\s*[:：]", s):
+            return True
+    if INST_INST_RE.search(s):
+        return True
+    if CN_INST_RE.search(s):
+        return True
+    if GENRE_RE.search(s) and (OPUS_RE.search(s) or MOV_RE.search(s)):
+        return True
+    if MOV_RE.search(s) and OPUS_RE.search(s):
+        return True
+    return False
+
+
 def is_instrumental(lrc):
-    """纯器乐/伴奏标记文本：正文很短且命中器乐关键词。"""
-    body = re.sub(r"\[.*?\]", "", lrc).strip()
-    return len(body) <= 40 and bool(INST_PAT.search(body))
+    """纯器乐/伴奏标记文本，或占位/残片/解说等无效歌词。"""
+    return is_placeholder(lrc)
 
 
 def load_durations():
@@ -334,6 +427,8 @@ def process_track(item, min_score):
     """单首完整链路：lrclib（带专辑名 → 无专辑名）→ 网易云；全部网络异常都在
     http_get_json 内消化，不会抛出。返回 (ai, ti, status, lrc, src)。"""
     ai, ti, t, a, al, dur = item
+    if title_is_inst(t):
+        return ai, ti, "miss", None, ""
     tn, an, aln = norm(t), norm(a), norm(al)
     status, lrc = lrclib_decide(t, a, al, tn, an, aln, min_score, dur)
     if status == "hit":
@@ -569,6 +664,30 @@ def clean_main(albums, state, hits, durs):
         if not obj:
             del hits[ai]
 
+    # 2c) 占位/残片/解说无效文本，以及明确器乐/伴奏/独奏协奏曲目挂的人声词：
+    #     剔除并降级 miss。弱词（lullaby/waltz/theme/小夜曲等）不误判。
+    inst_bad = []
+    for ai in list(hits.keys()):
+        if ai >= len(albums):
+            del hits[ai]
+            continue
+        obj = hits[ai]
+        tracks = albums[ai].get("tracks") or []
+        for ti_s in list(obj.keys()):
+            ti = int(ti_s)
+            if ti >= len(tracks):
+                continue
+            tn = tracks[ti].get("n") or ""
+            lrc = obj[ti_s]
+            if isinstance(lrc, list):
+                lrc = "\n".join(str(x) for x in lrc)
+            if is_placeholder(lrc) or title_is_inst(tn):
+                del obj[ti_s]
+                done["%d:%d" % (ai, ti)] = "miss"
+                inst_bad.append((ai, ti))
+        if not obj:
+            del hits[ai]
+
     # 3) state 记 hit 但分片缺该曲 → 记 miss
     fixed_missing = 0
     for key, st in list(done.items()):
@@ -603,6 +722,7 @@ def clean_main(albums, state, hits, durs):
     print("- 越界/非法 state 记录删除: %d 条" % len(stale))
     print("- 无效 hit 降级 miss 并移出分片: %d 首" % len(invalid))
     print("- 串歌共用文本剔除降级: %d 首" % len(shared_bad))
+    print("- 器乐/伴奏曲目与人声残片剔除降级: %d 首" % len(inst_bad))
     print("- hit 缺分片修正为 miss: %d 首" % fixed_missing)
     print("- 清空后删除的分片文件: %d 个" % removed_shards)
     g_hits = sum(1 for v in done.values() if v == "hit")

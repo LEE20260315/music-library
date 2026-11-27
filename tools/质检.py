@@ -27,6 +27,19 @@ REPORT_PATH = os.path.join(BASE_DIR, "_logs", "质检报告.md")
 
 LIB_PREFIX = "window.LIB_DATA="
 TS_PAT = re.compile(r"\[\d{1,2}:\d{2}")
+
+# 待人工复核条目（自动规则无法安全判定人声碟/合唱/歌剧与串歌的边界）。
+# 每项: (专辑下标, 曲目范围, 说明)。核对后可从清单移除；不记入必修项。
+REVIEW_LIST = [
+    (1388, "全碟 13 首", "沈洋《重低音》低男中音人声专辑，挂中文词疑似串歌，需逐首对原唱"),
+    (1150, "曲0", "Britten《Noye's Fludde》儿童歌剧合唱，歌词是否原配待核"),
+    (976, "曲17 Enigmatic Soul", "Two Steps From Hell 人声合唱/配乐，歌词归属待核"),
+    (600, "曲6", "Marta Gomez 西语女声挂英西混词，是否串歌待核"),
+    (805, "曲18 A Riverside Town - Jiang Cheng Ji", "老虎鱼试音碟人声曲，歌词归属待核"),
+    (1147, "曲3 Grieg Solveig's Song", "格里格声乐独唱曲，与同碟器乐舞曲分开复核"),
+    (1257, "全碟", "张学友人声碟，英文名挂中文词，已确认本人正确歌词，无需处理"),
+    (1489, "全碟", "蔡琴《机遇》人声原声，英文名挂中文词，已确认本人正确歌词，无需处理"),
+]
 SHARD_RE = re.compile(
     r"^window\.LIB_LYR=window\.LIB_LYR\|\|\{\};window\.LIB_LYR\[(\d+)\]=(\{.*\});$"
 )
@@ -268,6 +281,15 @@ def write_report(albums, intro, covers, lyr, out_path):
         for its in items:
             w("- a%d《%s》: " % (ai, albums[ai].get("album"))
               + "、".join("曲%d %s" % (t, n) for t, n in its))
+    w("")
+    w("### 3.3 待人工复核（规则边界，未自动剔除）")
+    w("")
+    for ai, scope, note in REVIEW_LIST:
+        if ai < len(albums):
+            al = albums[ai]
+            w("- a%d《%s》%s %s: %s" % (ai, al.get("album"), al.get("artist"), scope, note))
+        else:
+            w("- a%d %s: %s" % (ai, scope, note))
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
